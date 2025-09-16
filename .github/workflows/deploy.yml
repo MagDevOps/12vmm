@@ -42,29 +42,51 @@ jobs:
           import 'dart:convert';
           import 'package:flutter/material.dart';
           import 'package:shared_preferences/shared_preferences.dart';
-
+          
           void main() {
             WidgetsFlutterBinding.ensureInitialized();
             runApp(const MagnussonApp());
           }
-
-          /* ============================= THEME / COLORS ============================= */
-
+          
+          /* ============================= DESIGN TOKENS ============================= */
+          
           class AppColors {
-            static const ink = Color(0xFF0B1220);
-            static const primary = Color(0xFF2563EB);
-
-            // Pasteller för nivå 2 ( enligt din specifikation )
-            static const familj = Color(0xFFFFCDD2);      // röd pastel – övre vänster
-            static const halsa = Color(0xFFC8E6C9);       // grön pastel – övre höger
-            static const karriar = Color(0xFFFFE0B2);     // orange pastel – nedre vänster
-            static const utveckling = Color(0xFFBBDEFB);  // blå pastel – nedre höger
+            static const Color primary = Color(0xFF2563EB);
+            static const Color ink = Color(0xFF111827);
+            static const Color outline = Color(0xFF0F172A);
+            static const Color background = Color(0xFFF8FAFC);
+            static const Color surface = Colors.white;
+            static const Color surfaceSubtle = Color(0xFFF1F5F9);
+            static const Color muted = Color(0xFF475569);
+          
+            static const Color familj = Color(0xFFFFCDD2);
+            static const Color halsa = Color(0xFFC8E6C9);
+            static const Color karriar = Color(0xFFFFE0B2);
+            static const Color utveckling = Color(0xFFBBDEFB);
           }
-
+          
+          class AppSpacing {
+            static const double xs = 4;
+            static const double sm = 8;
+            static const double md = 12;
+            static const double lg = 16;
+            static const double xl = 24;
+            static const double xxl = 32;
+          
+            static const EdgeInsets screen = EdgeInsets.symmetric(horizontal: xl, vertical: xl);
+            static const EdgeInsets card = EdgeInsets.all(lg);
+          }
+          
+          class AppRadii {
+            static const BorderRadius small = BorderRadius.all(Radius.circular(8));
+            static const BorderRadius medium = BorderRadius.all(Radius.circular(12));
+            static const BorderRadius large = BorderRadius.all(Radius.circular(16));
+          }
+          
           /* ============================== DOMAIN MODEL ============================== */
-
+          
           enum Category { familj, halsa, karriar, utveckling }
-
+          
           extension CategoryMeta on Category {
             String get label {
               switch (this) {
@@ -78,8 +100,8 @@ jobs:
                   return 'Utveckling';
               }
             }
-
-            Color get color {
+          
+            Color get tint {
               switch (this) {
                 case Category.familj:
                   return AppColors.familj;
@@ -91,35 +113,48 @@ jobs:
                   return AppColors.utveckling;
               }
             }
+          
+            IconData get icon {
+              switch (this) {
+                case Category.familj:
+                  return Icons.favorite_outline;
+                case Category.halsa:
+                  return Icons.self_improvement;
+                case Category.karriar:
+                  return Icons.work_outline;
+                case Category.utveckling:
+                  return Icons.auto_awesome_outlined;
+              }
+            }
           }
-
+          
           String _newId() => DateTime.now().microsecondsSinceEpoch.toString();
-
+          
           class WeekActivity {
             bool planned;
             bool done;
-
+          
             WeekActivity({this.planned = false, this.done = false});
-
+          
             Map<String, dynamic> toJson() => {'p': planned, 'd': done};
             factory WeekActivity.fromJson(Map<String, dynamic> j) =>
                 WeekActivity(planned: j['p'] ?? false, done: j['d'] ?? false);
           }
-
+          
           class Activity {
             String id;
             String title;
             List<WeekActivity> weeks;
-
+          
             Activity({
               required this.id,
               required this.title,
               List<WeekActivity>? weeks,
             }) : weeks = weeks ?? List.generate(12, (_) => WeekActivity());
-
+          
             Map<String, dynamic> toJson() =>
                 {'id': id, 't': title, 'w': weeks.map((e) => e.toJson()).toList()};
-
+          
             factory Activity.fromJson(Map<String, dynamic> j) => Activity(
                   id: j['id'] as String,
                   title: j['t'] as String,
@@ -128,21 +163,21 @@ jobs:
                       .toList(),
                 );
           }
-
+          
           class Goal {
             String id;
             String title;
             List<Activity> activities;
-
+          
             Goal({required this.id, required this.title, List<Activity>? activities})
                 : activities = activities ?? [];
-
+          
             Map<String, dynamic> toJson() => {
                   'id': id,
                   't': title,
                   'a': activities.map((e) => e.toJson()).toList(),
                 };
-
+          
             factory Goal.fromJson(Map<String, dynamic> j) => Goal(
                   id: j['id'] as String,
                   title: j['t'] as String,
@@ -151,13 +186,13 @@ jobs:
                       .toList(),
                 );
           }
-
+          
           class UserProfile {
             String id;
             String name;
             DateTime startMonday; // styr 12-veckorsperiod och "aktuell vecka"
             Map<Category, List<Goal>> goalsByCat;
-
+          
             UserProfile({
               required this.id,
               required this.name,
@@ -170,7 +205,7 @@ jobs:
                       Category.karriar: [],
                       Category.utveckling: [],
                     };
-
+          
             Map<String, dynamic> toJson() => {
                   'id': id,
                   'n': name,
@@ -187,7 +222,7 @@ jobs:
                         .toList(),
                   }
                 };
-
+          
             factory UserProfile.fromJson(Map<String, dynamic> j) => UserProfile(
                   id: j['id'] as String,
                   name: j['n'] as String,
@@ -208,15 +243,15 @@ jobs:
                   },
                 );
           }
-
+          
           /* ============================== APP STATE ============================== */
-
+          
           class AppState extends ChangeNotifier {
             static const _kUsersKey = 'users_v1';
-
+          
             final Map<String, UserProfile> _users = {}; // id -> user
             String? currentUserId;
-
+          
             Future<void> load() async {
               final p = await SharedPreferences.getInstance();
               final raw = p.getString(_kUsersKey);
@@ -229,17 +264,17 @@ jobs:
               }
               notifyListeners();
             }
-
+          
             Future<void> _save() async {
               final p = await SharedPreferences.getInstance();
               final list = _users.values.map((u) => u.toJson()).toList();
               await p.setString(_kUsersKey, jsonEncode(list));
             }
-
+          
             // Users
             List<UserProfile> get users =>
                 _users.values.toList()..sort((a, b) => a.name.compareTo(b.name));
-
+          
             Future<void> addUser(String name) async {
               final id = _newId();
               final start = _nearestMonday(DateTime.now());
@@ -247,29 +282,29 @@ jobs:
               await _save();
               notifyListeners();
             }
-
+          
             Future<void> removeUser(String id) async {
               _users.remove(id);
               if (currentUserId == id) currentUserId = null;
               await _save();
               notifyListeners();
             }
-
+          
             void selectUser(String id) {
               currentUserId = id;
               notifyListeners();
             }
-
+          
             UserProfile? get currentUser =>
                 currentUserId == null ? null : _users[currentUserId];
-
+          
             Future<void> setStartMonday(DateTime d) async {
               if (currentUser == null) return;
               currentUser!.startMonday = _nearestMonday(d);
               await _save();
               notifyListeners();
             }
-
+          
             // Goals & activities
             Future<void> addGoal(Category c, String title) async {
               final u = currentUser!;
@@ -277,14 +312,14 @@ jobs:
               await _save();
               notifyListeners();
             }
-
+          
             Future<void> removeGoal(Category c, String goalId) async {
               final u = currentUser!;
               u.goalsByCat[c]!.removeWhere((g) => g.id == goalId);
               await _save();
               notifyListeners();
             }
-
+          
             Future<void> addActivity(
                 Category c, String goalId, String title, bool planAllWeeks) async {
               final u = currentUser!;
@@ -299,7 +334,7 @@ jobs:
               await _save();
               notifyListeners();
             }
-
+          
             Future<void> togglePlanned(
                 Category c, String goalId, String activityId, int week, bool v) async {
               final a = _findAct(c, goalId, activityId);
@@ -308,7 +343,7 @@ jobs:
               await _save();
               notifyListeners();
             }
-
+          
             Future<void> toggleDone(
                 Category c, String goalId, String activityId, int week, bool v) async {
               final a = _findAct(c, goalId, activityId);
@@ -318,7 +353,7 @@ jobs:
                 notifyListeners();
               }
             }
-
+          
             Future<void> removeActivity(
                 Category c, String goalId, String activityId) async {
               final u = currentUser!;
@@ -327,13 +362,13 @@ jobs:
               await _save();
               notifyListeners();
             }
-
+          
             Activity _findAct(Category c, String goalId, String actId) {
               final u = currentUser!;
               final g = u.goalsByCat[c]!.firstWhere((g) => g.id == goalId);
               return g.activities.firstWhere((a) => a.id == actId);
             }
-
+          
             // Week / progress
             int get currentWeek {
               final u = currentUser;
@@ -343,14 +378,14 @@ jobs:
               final w = (diff ~/ 7) + 1;
               return w.clamp(1, 12);
             }
-
+          
             DateTimeRange weekDateRange(int week) {
               final start =
                   currentUser!.startMonday.add(Duration(days: (week - 1) * 7));
               final end = start.add(const Duration(days: 6));
               return DateTimeRange(start: start, end: end);
             }
-
+          
             double? categoryWeekPercent(Category c, int week) {
               final u = currentUser!;
               int planned = 0;
@@ -367,24 +402,98 @@ jobs:
               return done / planned;
             }
           }
-
+          
           /* ================================ WIDGETS ================================ */
-
+          
           class MagnussonApp extends StatefulWidget {
             const MagnussonApp({super.key});
+          
             @override
             State<MagnussonApp> createState() => _MagnussonAppState();
           }
-
+          
           class _MagnussonAppState extends State<MagnussonApp> {
             final AppState state = AppState();
-
+          
             @override
             void initState() {
               super.initState();
               state.load();
             }
-
+          
+            ThemeData _buildTheme() {
+              final base = ThemeData(
+                useMaterial3: true,
+                colorScheme: ColorScheme.fromSeed(
+                  seedColor: AppColors.primary,
+                  primary: AppColors.primary,
+                  brightness: Brightness.light,
+                ),
+              );
+          
+              return base.copyWith(
+                scaffoldBackgroundColor: AppColors.background,
+                textTheme: base.textTheme.apply(
+                  bodyColor: AppColors.ink,
+                  displayColor: AppColors.ink,
+                ),
+                appBarTheme: const AppBarTheme(
+                  backgroundColor: AppColors.surface,
+                  foregroundColor: AppColors.ink,
+                  surfaceTintColor: Colors.transparent,
+                  elevation: 0,
+                  centerTitle: true,
+                ),
+                cardTheme: const CardTheme(
+                  color: AppColors.surface,
+                  margin: EdgeInsets.zero,
+                  shape: RoundedRectangleBorder(borderRadius: AppRadii.large),
+                ),
+                filledButtonTheme: FilledButtonThemeData(
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(120, 44),
+                    textStyle: const TextStyle(fontWeight: FontWeight.w600),
+                    shape: const RoundedRectangleBorder(borderRadius: AppRadii.medium),
+                  ),
+                ),
+                textButtonTheme: TextButtonThemeData(
+                  style: TextButton.styleFrom(
+                    textStyle: const TextStyle(fontWeight: FontWeight.w600),
+                    shape: const RoundedRectangleBorder(borderRadius: AppRadii.medium),
+                  ),
+                ),
+                iconButtonTheme: IconButtonThemeData(
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size.square(44),
+                    shape: const RoundedRectangleBorder(borderRadius: AppRadii.medium),
+                    foregroundColor: AppColors.ink,
+                  ),
+                ),
+                chipTheme: base.chipTheme.copyWith(
+                  labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+                  showCheckmark: false,
+                  shape: const RoundedRectangleBorder(borderRadius: AppRadii.medium),
+                ),
+                inputDecorationTheme: const InputDecorationTheme(
+                  filled: true,
+                  fillColor: AppColors.surface,
+                  border: OutlineInputBorder(borderRadius: AppRadii.medium),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: AppRadii.medium,
+                    borderSide: BorderSide(color: AppColors.primary, width: 2),
+                  ),
+                ),
+                dividerColor: AppColors.ink.withOpacity(0.08),
+                tooltipTheme: const TooltipThemeData(
+                  decoration: BoxDecoration(
+                    color: AppColors.ink,
+                    borderRadius: AppRadii.small,
+                  ),
+                  textStyle: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                ),
+              );
+            }
+          
             @override
             Widget build(BuildContext context) {
               return AnimatedBuilder(
@@ -393,20 +502,7 @@ jobs:
                   return MaterialApp(
                     debugShowCheckedModeBanner: false,
                     title: '12 veckor med Magnusson',
-                    theme: ThemeData(
-                      useMaterial3: true,
-                      colorScheme: ColorScheme.fromSeed(seedColor: AppColors.primary),
-                      appBarTheme: const AppBarTheme(
-                        centerTitle: true,
-                        backgroundColor: Colors.white,
-                        foregroundColor: AppColors.ink,
-                        elevation: 0.5,
-                      ),
-                      scaffoldBackgroundColor: const Color(0xFFF8FAFC),
-                      inputDecorationTheme: const InputDecorationTheme(
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
+                    theme: _buildTheme(),
                     home: state.currentUser == null
                         ? UserSelectScreen(state: state)
                         : CategoryScreen(state: state),
@@ -415,150 +511,198 @@ jobs:
               );
             }
           }
-
+          
           /* ================================ LEVEL 1 ================================ */
-
+          
           class UserSelectScreen extends StatefulWidget {
             final AppState state;
             const UserSelectScreen({super.key, required this.state});
-
+          
             @override
             State<UserSelectScreen> createState() => _UserSelectScreenState();
           }
-
+          
           class _UserSelectScreenState extends State<UserSelectScreen> {
             final TextEditingController _name = TextEditingController();
-
+          
             @override
             void dispose() {
               _name.dispose();
               super.dispose();
             }
-
+          
             Future<void> _create() async {
               final v = _name.text.trim();
               if (v.isEmpty) return;
               await widget.state.addUser(v);
               _name.clear();
             }
-
+          
+            Future<void> _openUser(UserProfile u) async {
+              widget.state.selectUser(u.id);
+              if (!mounted) return;
+              await Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CategoryScreen(state: widget.state),
+                ),
+              );
+            }
+          
+            Future<void> _confirmDelete(UserProfile u) async {
+              final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (c) => AlertDialog(
+                      title: const Text('Radera användare?'),
+                      content: Text(
+                        'Detta tar bort all lokal data för "${u.name}". Vill du fortsätta?',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(c, false),
+                          child: const Text('Avbryt'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(c, true),
+                          child: const Text('Radera'),
+                        ),
+                      ],
+                    ),
+                  ) ??
+                  false;
+              if (ok) {
+                await widget.state.removeUser(u.id);
+              }
+            }
+          
             @override
             Widget build(BuildContext context) {
               final users = widget.state.users;
+              final theme = Theme.of(context);
               return Scaffold(
                 appBar: AppBar(title: const _LogoTitle()),
                 body: Center(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 680),
+                    constraints: const BoxConstraints(maxWidth: 720),
                     child: Padding(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.xl,
+                        vertical: AppSpacing.xl,
+                      ),
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const Text(
-                            'Användare',
-                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+                          Text(
+                            'Välj profil',
+                            style: theme.textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: _name,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Namn (skapa ny användare)',
-                                    hintText: 'Skriv ditt namn',
+                          const SizedBox(height: AppSpacing.sm),
+                          Text(
+                            'Skapa en ny profil eller öppna en befintlig.',
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              color: AppColors.muted,
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.xl),
+                          Card(
+                            child: Padding(
+                              padding: AppSpacing.card,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Ny användare',
+                                    style: theme.textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                    ),
                                   ),
-                                  onSubmitted: (_) => _create(),
-                                ),
+                                  const SizedBox(height: AppSpacing.md),
+                                  LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      final isNarrow = constraints.maxWidth < 520;
+                                      final field = Expanded(
+                                        child: TextField(
+                                          controller: _name,
+                                          decoration: const InputDecoration(
+                                            labelText: 'Namn',
+                                            hintText: 'Skriv ditt namn',
+                                          ),
+                                          onSubmitted: (_) => _create(),
+                                        ),
+                                      );
+                                      final button = FilledButton.icon(
+                                        onPressed: _create,
+                                        icon: const Icon(Icons.person_add_alt_1_outlined),
+                                        label: const Text('Skapa profil'),
+                                      );
+                                      if (isNarrow) {
+                                        return Column(
+                                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                                          children: [
+                                            field,
+                                            const SizedBox(height: AppSpacing.md),
+                                            button,
+                                          ],
+                                        );
+                                      }
+                                      return Row(
+                                        children: [
+                                          field,
+                                          const SizedBox(width: AppSpacing.md),
+                                          button,
+                                        ],
+                                      );
+                                    },
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 8),
-                              FilledButton(
-                                onPressed: _create,
-                                child: const Text('Skapa'),
-                              ),
-                            ],
+                            ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: AppSpacing.xl),
                           Expanded(
                             child: users.isEmpty
-                                ? const Center(
-                                    child: Text(
-                                      'Inga användare ännu.\nSkapa en profil ovan.',
-                                      textAlign: TextAlign.center,
+                                ? Card(
+                                    child: Padding(
+                                      padding: AppSpacing.card,
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                            Icons.groups_outlined,
+                                            size: 48,
+                                            color: AppColors.muted,
+                                          ),
+                                          const SizedBox(height: AppSpacing.md),
+                                          Text(
+                                            'Inga användare ännu.',
+                                            style: theme.textTheme.titleMedium?.copyWith(
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          const SizedBox(height: AppSpacing.sm),
+                                          Text(
+                                            'Skapa en profil ovan för att komma igång.',
+                                            textAlign: TextAlign.center,
+                                            style: theme.textTheme.bodyMedium?.copyWith(
+                                              color: AppColors.muted,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   )
                                 : ListView.separated(
                                     itemCount: users.length,
-                                    separatorBuilder: (_, __) => const Divider(height: 1),
+                                    separatorBuilder: (_, __) =>
+                                        const SizedBox(height: AppSpacing.lg),
                                     itemBuilder: (context, i) {
                                       final u = users[i];
-                                      return ListTile(
-                                        title: Text(u.name),
-                                        subtitle: Text(
-                                            'Start: ${_fmtDate(u.startMonday)} (vecka ${_weekFrom(u.startMonday).clamp(1, 12)}/12)'),
-                                        leading: CircleAvatar(
-                                          backgroundColor: Colors.grey.shade200,
-                                          child: Text(
-                                            u.name.characters.first.toUpperCase(),
-                                            style: const TextStyle(color: AppColors.ink),
-                                          ),
-                                        ),
-                                        trailing: Wrap(
-                                          spacing: 8,
-                                          children: [
-                                            CircleAvatar(
-                                              radius: 16,
-                                              backgroundColor: Colors.red.shade50,
-                                              child: IconButton(
-                                                padding: EdgeInsets.zero,
-                                                iconSize: 18,
-                                                color: Colors.red.shade700,
-                                                icon: const Icon(Icons.close),
-                                                onPressed: () async {
-                                                  final ok = await showDialog<bool>(
-                                                        context: context,
-                                                        builder: (c) => AlertDialog(
-                                                          title: const Text('Radera användare?'),
-                                                          content: Text(
-                                                              'Detta tar bort all lokal data för "${u.name}".\nVill du fortsätta?'),
-                                                          actions: [
-                                                            TextButton(
-                                                                onPressed: () =>
-                                                                    Navigator.pop(c, false),
-                                                                child: const Text('Avbryt')),
-                                                            FilledButton(
-                                                                onPressed: () =>
-                                                                    Navigator.pop(c, true),
-                                                                child: const Text('Radera')),
-                                                          ],
-                                                        ),
-                                                      ) ??
-                                                      false;
-                                                  if (ok) {
-                                                    await widget.state.removeUser(u.id);
-                                                  }
-                                                },
-                                              ),
-                                            ),
-                                            IconButton(
-                                              tooltip: 'Fortsätt',
-                                              icon: const Icon(
-                                                Icons.arrow_circle_right,
-                                                color: Colors.green,
-                                              ),
-                                              onPressed: () {
-                                                widget.state.selectUser(u.id);
-                                                Navigator.pushReplacement(
-                                                  context,
-                                                  MaterialPageRoute(
-                                                    builder: (_) =>
-                                                        CategoryScreen(state: widget.state),
-                                                  ),
-                                                );
-                                              },
-                                            ),
-                                          ],
-                                        ),
+                                      return _UserCard(
+                                        user: u,
+                                        onOpen: () => _openUser(u),
+                                        onDelete: () => _confirmDelete(u),
                                       );
                                     },
                                   ),
@@ -571,18 +715,120 @@ jobs:
               );
             }
           }
-
+          
+          class _UserCard extends StatelessWidget {
+            const _UserCard({
+              required this.user,
+              required this.onOpen,
+              required this.onDelete,
+            });
+          
+            final UserProfile user;
+            final VoidCallback onOpen;
+            final VoidCallback onDelete;
+          
+            @override
+            Widget build(BuildContext context) {
+              final week = _weekFrom(user.startMonday).clamp(1, 12);
+              return Card(
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  borderRadius: AppRadii.large,
+                  focusColor: AppColors.primary.withOpacity(0.12),
+                  highlightColor: AppColors.primary.withOpacity(0.05),
+                  onTap: onOpen,
+                  child: Padding(
+                    padding: AppSpacing.card,
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 28,
+                          backgroundColor: AppColors.surfaceSubtle,
+                          child: Text(
+                            user.name.characters.first.toUpperCase(),
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.lg),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                user.name,
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                              ),
+                              const SizedBox(height: AppSpacing.xs),
+                              Text(
+                                'Start: ${_fmtDate(user.startMonday)}',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(color: AppColors.muted),
+                              ),
+                              Text(
+                                'Aktuell vecka: $week/12',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(color: AppColors.muted),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.md),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Tooltip(
+                              message: 'Öppna profil',
+                              child: FilledButton.tonalIcon(
+                                onPressed: onOpen,
+                                icon: const Icon(Icons.arrow_forward_rounded),
+                                label: const Text('Öppna'),
+                                style: FilledButton.styleFrom(
+                                  minimumSize: const Size(120, 44),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: AppSpacing.sm),
+                            Tooltip(
+                              message: 'Radera användare',
+                              child: IconButton(
+                                tooltip: 'Radera användare',
+                                onPressed: onDelete,
+                                icon: const Icon(Icons.delete_outline),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+          }
+          
           /* ================================ LEVEL 2 ================================ */
-
+          
           class CategoryScreen extends StatelessWidget {
             final AppState state;
             const CategoryScreen({super.key, required this.state});
-
+          
             @override
             Widget build(BuildContext context) {
               final week = state.currentWeek;
               final range = state.weekDateRange(week);
               final user = state.currentUser!;
+              final theme = Theme.of(context);
+          
               return Scaffold(
                 appBar: AppBar(
                   title: const _LogoTitle(),
@@ -604,52 +850,90 @@ jobs:
                 body: Column(
                   children: [
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                      child: Row(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.xl,
+                        AppSpacing.lg,
+                        AppSpacing.xl,
+                        AppSpacing.sm,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Expanded(
-                            child: Text(
-                              'Vecka $week/12 · ${_fmtDate(range.start)} – ${_fmtDate(range.end)}',
-                              style: const TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.w700),
+                          Text(
+                            'Hej ${user.name}!',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
-                          TextButton.icon(
-                            onPressed: () async {
-                              final picked = await showDatePicker(
-                                context: context,
-                                helpText: 'Välj startmåndag',
-                                firstDate: DateTime(DateTime.now().year - 1),
-                                lastDate: DateTime(DateTime.now().year + 1),
-                                initialDate: user.startMonday,
-                              );
-                              if (picked != null) {
-                                await state.setStartMonday(picked);
-                              }
-                            },
-                            icon: const Icon(Icons.calendar_month_outlined),
-                            label: const Text('Startmåndag'),
-                          )
+                          const SizedBox(height: AppSpacing.xs),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Vecka $week av 12',
+                                      style: theme.textTheme.titleMedium,
+                                    ),
+                                    const SizedBox(height: AppSpacing.xs),
+                                    Text(
+                                      '${_fmtDate(range.start)} – ${_fmtDate(range.end)}',
+                                      style: theme.textTheme.bodyMedium
+                                          ?.copyWith(color: AppColors.muted),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Tooltip(
+                                message: 'Ändra startmåndag',
+                                child: TextButton.icon(
+                                  onPressed: () async {
+                                    final picked = await showDatePicker(
+                                      context: context,
+                                      helpText: 'Välj startmåndag',
+                                      firstDate: DateTime(DateTime.now().year - 1),
+                                      lastDate: DateTime(DateTime.now().year + 1),
+                                      initialDate: user.startMonday,
+                                    );
+                                    if (picked != null) {
+                                      await state.setStartMonday(picked);
+                                    }
+                                  },
+                                  icon: const Icon(Icons.calendar_month_outlined),
+                                  label: const Text('Startmåndag'),
+                                ),
+                              )
+                            ],
+                          ),
                         ],
                       ),
                     ),
                     Expanded(
-                      child: GridView.count(
-                        crossAxisCount: 2,
-                        childAspectRatio: 1.0,
-                        padding: const EdgeInsets.all(16),
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                        children: [
-                          _CategoryTile2(
-                              state: state, c: Category.familj, outline: true),
-                          _CategoryTile2(
-                              state: state, c: Category.halsa, outline: true),
-                          _CategoryTile2(
-                              state: state, c: Category.karriar, outline: true),
-                          _CategoryTile2(
-                              state: state, c: Category.utveckling, outline: true),
-                        ],
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final columns = constraints.maxWidth >= 900 ? 3 : 2;
+                          return GridView.builder(
+                            padding: const EdgeInsets.fromLTRB(
+                              AppSpacing.xl,
+                              AppSpacing.lg,
+                              AppSpacing.xl,
+                              AppSpacing.xl,
+                            ),
+                            itemCount: Category.values.length,
+                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: columns,
+                              mainAxisSpacing: AppSpacing.lg,
+                              crossAxisSpacing: AppSpacing.lg,
+                              childAspectRatio: 4 / 3,
+                            ),
+                            itemBuilder: (context, index) {
+                              final c = Category.values[index];
+                              return _CategoryTile(state: state, category: c);
+                            },
+                          );
+                        },
                       ),
                     ),
                   ],
@@ -657,60 +941,79 @@ jobs:
               );
             }
           }
-
-          class _CategoryTile2 extends StatelessWidget {
+          
+          class _CategoryTile extends StatelessWidget {
+            const _CategoryTile({required this.state, required this.category});
+          
             final AppState state;
-            final Category c;
-            final bool outline;
-            const _CategoryTile2(
-                {required this.state, required this.c, this.outline = false});
-
+            final Category category;
+          
             @override
             Widget build(BuildContext context) {
-              final p = state.categoryWeekPercent(c, state.currentWeek);
-              final percentText = (p == null) ? '–' : '${(p * 100).round()}%';
+              final progress = state.categoryWeekPercent(category, state.currentWeek);
+              final percentText = progress == null
+                  ? 'Inget planerat än'
+                  : '${(progress * 100).round()}% klart';
               return Material(
-                color: c.color,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: outline
-                      ? const BorderSide(color: Colors.black, width: 1)
-                      : BorderSide.none,
-                ),
+                color: Colors.transparent,
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: AppRadii.large,
+                  focusColor: AppColors.primary.withOpacity(0.12),
+                  highlightColor: AppColors.primary.withOpacity(0.05),
                   onTap: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => GoalsScreen(state: state, category: c),
+                        builder: (_) => GoalsScreen(state: state, category: category),
                       ),
                     );
                   },
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Stack(
+                  child: Container(
+                    decoration: ShapeDecoration(
+                      color: category.tint.withOpacity(0.6),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: AppRadii.large,
+                        side: const BorderSide(color: Colors.black, width: 1),
+                      ),
+                    ),
+                    padding: const EdgeInsets.all(AppSpacing.lg),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                c.label,
-                                style: const TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w800,
-                                    color: AppColors.ink),
+                        Icon(
+                          category.icon,
+                          size: 28,
+                          color: AppColors.ink,
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        Text(
+                          category.label,
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.ink,
                               ),
-                              const SizedBox(height: 6),
-                              Text(
-                                'Veckans framgång: $percentText',
-                                style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.ink),
-                              ),
-                            ],
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        Text(
+                          percentText,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(color: AppColors.ink),
+                        ),
+                        const Spacer(),
+                        Tooltip(
+                          message: progress == null
+                              ? 'Planera aktiviteter för att se framsteg'
+                              : 'Framsteg denna vecka',
+                          child: ClipRRect(
+                            borderRadius: AppRadii.small,
+                            child: LinearProgressIndicator(
+                              value: progress ?? 0,
+                              minHeight: 8,
+                              backgroundColor: AppColors.surface.withOpacity(0.6),
+                              color: AppColors.ink,
+                            ),
                           ),
                         ),
                       ],
@@ -720,346 +1023,564 @@ jobs:
               );
             }
           }
-
+          
           /* ================================ LEVEL 3 ================================ */
-
+          
           class GoalsScreen extends StatefulWidget {
             final AppState state;
             final Category category;
             const GoalsScreen({super.key, required this.state, required this.category});
-
+          
             @override
             State<GoalsScreen> createState() => _GoalsScreenState();
           }
-
+          
           class _GoalsScreenState extends State<GoalsScreen> {
             final TextEditingController _ctrl = TextEditingController();
-
+          
             @override
             void dispose() {
               _ctrl.dispose();
               super.dispose();
             }
-
+          
             Future<void> _add() async {
               final v = _ctrl.text.trim();
               if (v.isEmpty) return;
               await widget.state.addGoal(widget.category, v);
               _ctrl.clear();
             }
-
+          
             @override
             Widget build(BuildContext context) {
               final goals =
                   widget.state.currentUser!.goalsByCat[widget.category] ?? <Goal>[];
+              final theme = Theme.of(context);
               return Scaffold(
-                appBar: AppBar(title: Text('${widget.category.label} – Mål')),
-                body: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _ctrl,
-                              decoration: const InputDecoration(
-                                labelText: 'Nytt mål',
-                                hintText: 'Skriv ett mål för kategorin',
-                              ),
-                              onSubmitted: (_) => _add(),
-                            ),
+                appBar: AppBar(title: Text('${widget.category.label} – mål')),
+                body: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  child: Column(
+                    children: [
+                      Card(
+                        child: Padding(
+                          padding: AppSpacing.card,
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final isNarrow = constraints.maxWidth < 620;
+                              final field = Expanded(
+                                child: TextField(
+                                  controller: _ctrl,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Nytt mål',
+                                    hintText: 'Beskriv vad du vill uppnå',
+                                  ),
+                                  onSubmitted: (_) => _add(),
+                                ),
+                              );
+                              final button = FilledButton.icon(
+                                onPressed: _add,
+                                icon: const Icon(Icons.add_task_outlined),
+                                label: const Text('Skapa mål'),
+                              );
+                              if (isNarrow) {
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    field,
+                                    const SizedBox(height: AppSpacing.md),
+                                    button,
+                                  ],
+                                );
+                              }
+                              return Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  field,
+                                  const SizedBox(width: AppSpacing.md),
+                                  button,
+                                ],
+                              );
+                            },
                           ),
-                          const SizedBox(width: 8),
-                          FilledButton(onPressed: _add, child: const Text('Skapa mål')),
-                        ],
+                        ),
                       ),
-                    ),
-                    Expanded(
-                      child: goals.isEmpty
-                          ? const Center(
-                              child: Text('Inga mål ännu. Lägg till ett ovan.'))
-                          : ListView.separated(
-                              itemCount: goals.length,
-                              separatorBuilder: (_, __) => const Divider(height: 1),
-                              itemBuilder: (context, i) {
-                                final g = goals[i];
-                                return ListTile(
-                                  title: Text(g.title),
-                                  leading: const Icon(Icons.flag_outlined),
-                                  trailing: Wrap(
-                                    spacing: 8,
+                      const SizedBox(height: AppSpacing.xl),
+                      Expanded(
+                        child: goals.isEmpty
+                            ? Card(
+                                child: Padding(
+                                  padding: AppSpacing.card,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      IconButton(
-                                        tooltip: 'Aktiviteter',
-                                        icon: const Icon(Icons.checklist_outlined),
-                                        onPressed: () {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (_) => ActivitiesScreen(
-                                                state: widget.state,
-                                                category: widget.category,
-                                                goal: g,
-                                              ),
-                                            ),
-                                          );
-                                        },
+                                      const Icon(
+                                        Icons.flag_outlined,
+                                        size: 48,
+                                        color: AppColors.muted,
                                       ),
-                                      IconButton(
-                                        tooltip: 'Radera mål',
-                                        icon: const Icon(Icons.delete_outline),
-                                        onPressed: () async {
-                                          final ok = await showDialog<bool>(
-                                                context: context,
-                                                builder: (c) => AlertDialog(
-                                                  title: const Text('Radera mål?'),
-                                                  content: Text(
-                                                      'Detta tar bort "${g.title}" och tillhörande aktiviteter.'),
-                                                  actions: [
-                                                    TextButton(
-                                                        onPressed: () =>
-                                                            Navigator.pop(c, false),
-                                                        child: const Text('Avbryt')),
-                                                    FilledButton(
-                                                        onPressed: () =>
-                                                            Navigator.pop(c, true),
-                                                        child: const Text('Radera')),
-                                                  ],
-                                                ),
-                                              ) ??
-                                              false;
-                                          if (ok) {
-                                            await widget.state
-                                                .removeGoal(widget.category, g.id);
-                                          }
-                                        },
+                                      const SizedBox(height: AppSpacing.md),
+                                      Text(
+                                        'Inga mål ännu',
+                                        style: theme.textTheme.titleMedium?.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      const SizedBox(height: AppSpacing.sm),
+                                      Text(
+                                        'Lägg till mål ovan. Tips: fokusera på tydliga, mätbara resultat för de kommande 12 veckorna.',
+                                        textAlign: TextAlign.center,
+                                        style: theme.textTheme.bodyMedium?.copyWith(
+                                          color: AppColors.muted,
+                                        ),
                                       ),
                                     ],
                                   ),
-                                );
-                              },
+                                ),
+                              )
+                            : ListView.separated(
+                                itemCount: goals.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: AppSpacing.lg),
+                                itemBuilder: (context, i) {
+                                  final g = goals[i];
+                                  return Card(
+                                    clipBehavior: Clip.antiAlias,
+                                    child: InkWell(
+                                      borderRadius: AppRadii.large,
+                                      focusColor: AppColors.primary.withOpacity(0.12),
+                                      highlightColor:
+                                          AppColors.primary.withOpacity(0.05),
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => ActivitiesScreen(
+                                              state: widget.state,
+                                              category: widget.category,
+                                              goal: g,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                      child: Padding(
+                                        padding: AppSpacing.card,
+                                        child: Row(
+                                          children: [
+                                            const Icon(Icons.flag_outlined),
+                                            const SizedBox(width: AppSpacing.md),
+                                            Expanded(
+                                              child: Text(
+                                                g.title,
+                                                style: theme.textTheme.titleMedium?.copyWith(
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                            ),
+                                            Tooltip(
+                                              message: 'Hantera aktiviteter',
+                                              child: IconButton(
+                                                tooltip: 'Hantera aktiviteter',
+                                                icon: const Icon(Icons.checklist_outlined),
+                                                onPressed: () {
+                                                  Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder: (_) => ActivitiesScreen(
+                                                        state: widget.state,
+                                                        category: widget.category,
+                                                        goal: g,
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                            ),
+                                            Tooltip(
+                                              message: 'Radera mål',
+                                              child: IconButton(
+                                                tooltip: 'Radera mål',
+                                                icon: const Icon(Icons.delete_outline),
+                                                onPressed: () async {
+                                                  final ok = await showDialog<bool>(
+                                                        context: context,
+                                                        builder: (c) => AlertDialog(
+                                                          title: const Text('Radera mål?'),
+                                                          content: Text(
+                                                            'Detta tar bort "${g.title}" och tillhörande aktiviteter.',
+                                                          ),
+                                                          actions: [
+                                                            TextButton(
+                                                              onPressed: () =>
+                                                                  Navigator.pop(c, false),
+                                                              child: const Text('Avbryt'),
+                                                            ),
+                                                            FilledButton(
+                                                              onPressed: () =>
+                                                                  Navigator.pop(c, true),
+                                                              child: const Text('Radera'),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ) ??
+                                                      false;
+                                                  if (ok) {
+                                                    await widget.state.removeGoal(
+                                                        widget.category, g.id);
+                                                  }
+                                                },
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+          }
+          
+          /* ================================ LEVEL 4 ================================ */
+          
+          class ActivitiesScreen extends StatefulWidget {
+            final AppState state;
+            final Category category;
+            final Goal goal;
+          
+            const ActivitiesScreen({
+              super.key,
+              required this.state,
+              required this.category,
+              required this.goal,
+            });
+          
+            @override
+            State<ActivitiesScreen> createState() => _ActivitiesScreenState();
+          }
+          
+          class _ActivitiesScreenState extends State<ActivitiesScreen> {
+            final TextEditingController _ctrl = TextEditingController();
+            int? manualWeek;
+          
+            @override
+            void dispose() {
+              _ctrl.dispose();
+              super.dispose();
+            }
+          
+            int get currentWeek => manualWeek ?? widget.state.currentWeek;
+          
+            Future<void> _addActivity() async {
+              final v = _ctrl.text.trim();
+              if (v.isEmpty) return;
+              await widget.state.addActivity(
+                widget.category,
+                widget.goal.id,
+                v,
+                true,
+              );
+              _ctrl.clear();
+            }
+          
+            @override
+            Widget build(BuildContext context) {
+              final week = currentWeek;
+              final range = widget.state.weekDateRange(week);
+              final acts = widget.goal.activities;
+              final theme = Theme.of(context);
+          
+              return Scaffold(
+                appBar: AppBar(
+                  title: Text('${widget.goal.title} – vecka $week/12'),
+                ),
+                body: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.xl,
+                        AppSpacing.lg,
+                        AppSpacing.xl,
+                        AppSpacing.sm,
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${_fmtDate(range.start)} – ${_fmtDate(range.end)}',
+                                  style: theme.textTheme.bodyLarge?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: AppSpacing.xs),
+                                Text(
+                                  'Planera och bocka av aktiviteter för veckan.',
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: AppColors.muted,
+                                  ),
+                                ),
+                              ],
                             ),
+                          ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Tooltip(
+                                message: 'Föregående vecka',
+                                child: IconButton(
+                                  tooltip: 'Föregående vecka',
+                                  onPressed: week > 1
+                                      ? () => setState(() => manualWeek = week - 1)
+                                      : null,
+                                  icon: const Icon(Icons.chevron_left),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: AppSpacing.sm,
+                                ),
+                                child: Text('$week/12'),
+                              ),
+                              Tooltip(
+                                message: 'Nästa vecka',
+                                child: IconButton(
+                                  tooltip: 'Nästa vecka',
+                                  onPressed: week < 12
+                                      ? () => setState(() => manualWeek = week + 1)
+                                      : null,
+                                  icon: const Icon(Icons.chevron_right),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.xl,
+                        AppSpacing.sm,
+                        AppSpacing.xl,
+                        AppSpacing.lg,
+                      ),
+                      child: Card(
+                        child: Padding(
+                          padding: AppSpacing.card,
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final isNarrow = constraints.maxWidth < 620;
+                              final field = Expanded(
+                                child: TextField(
+                                  controller: _ctrl,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Ny aktivitet',
+                                    hintText: 'Ex: 30 min läsning, veckomöte, träning',
+                                  ),
+                                  onSubmitted: (_) => _addActivity(),
+                                ),
+                              );
+                              final button = FilledButton.icon(
+                                onPressed: _addActivity,
+                                icon: const Icon(Icons.add_outlined),
+                                label: const Text('Lägg till'),
+                              );
+                              if (isNarrow) {
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    field,
+                                    const SizedBox(height: AppSpacing.md),
+                                    button,
+                                  ],
+                                );
+                              }
+                              return Row(
+                                children: [
+                                  field,
+                                  const SizedBox(width: AppSpacing.md),
+                                  button,
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+                        child: acts.isEmpty
+                            ? Card(
+                                child: Padding(
+                                  padding: AppSpacing.card,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.checklist_outlined,
+                                        size: 48,
+                                        color: AppColors.muted,
+                                      ),
+                                      const SizedBox(height: AppSpacing.md),
+                                      Text(
+                                        'Inga aktiviteter ännu',
+                                        style: theme.textTheme.titleMedium?.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      const SizedBox(height: AppSpacing.sm),
+                                      Text(
+                                        'Lägg till aktiviteter ovan och använd filtren för att markera planering och klar status.',
+                                        textAlign: TextAlign.center,
+                                        style: theme.textTheme.bodyMedium?.copyWith(
+                                          color: AppColors.muted,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
+                            : ListView.separated(
+                                itemCount: acts.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: AppSpacing.lg),
+                                itemBuilder: (context, i) {
+                                  final a = acts[i];
+                                  final w = a.weeks[week - 1];
+                                  return Card(
+                                    child: Padding(
+                                      padding: AppSpacing.card,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  a.title,
+                                                  style: theme.textTheme.titleMedium?.copyWith(
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                              ),
+                                              Tooltip(
+                                                message: 'Radera aktivitet',
+                                                child: IconButton(
+                                                  tooltip: 'Radera aktivitet',
+                                                  icon: const Icon(Icons.delete_outline),
+                                                  onPressed: () => widget.state.removeActivity(
+                                                    widget.category,
+                                                    widget.goal.id,
+                                                    a.id,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: AppSpacing.md),
+                                          Wrap(
+                                            spacing: AppSpacing.sm,
+                                            runSpacing: AppSpacing.sm,
+                                            children: [
+                                              Tooltip(
+                                                message: 'Markera som planerad för vecka $week',
+                                                child: FilterChip(
+                                                  label: const Text('Planerad'),
+                                                  selected: w.planned,
+                                                  onSelected: (v) => widget.state.togglePlanned(
+                                                    widget.category,
+                                                    widget.goal.id,
+                                                    a.id,
+                                                    week,
+                                                    v,
+                                                  ),
+                                                ),
+                                              ),
+                                              Tooltip(
+                                                message: 'Markera som klar för vecka $week',
+                                                child: FilterChip(
+                                                  label: const Text('Klar'),
+                                                  selected: w.done,
+                                                  onSelected: w.planned
+                                                      ? (v) => widget.state.toggleDone(
+                                                            widget.category,
+                                                            widget.goal.id,
+                                                            a.id,
+                                                            week,
+                                                            v,
+                                                          )
+                                                      : null,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
+                    ),
+                    Builder(
+                      builder: (_) {
+                        final planned =
+                            acts.where((a) => a.weeks[week - 1].planned).length;
+                        final done = acts
+                            .where((a) =>
+                                a.weeks[week - 1].planned && a.weeks[week - 1].done)
+                            .length;
+                        final pct = planned == 0 ? null : (done / planned);
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(AppSpacing.lg),
+                          decoration: const BoxDecoration(
+                            color: AppColors.surfaceSubtle,
+                            border: Border(
+                              top: BorderSide(color: AppColors.outline, width: 0.5),
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Veckans progression',
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: AppSpacing.xs),
+                              Text(
+                                pct == null
+                                    ? 'Planera aktiviteter för att följa upp veckan.'
+                                    : '${(pct * 100).round()}% klara · Klara: $done / Planerade: $planned',
+                              ),
+                            ],
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),
               );
             }
           }
-
-                 /* ================================ LEVEL 4 ================================ */
-               class ActivitiesScreen extends StatefulWidget {
-          final AppState state;
-          final Category category;
-          final Goal goal;
-
-          const ActivitiesScreen(
-                        {super.key,
-                        required this.state,
-                        required this.category,
-                        required this.goal});
-                  
-                    @override
-                    State<ActivitiesScreen> createState() => _ActivitiesScreenState();
-                  }
-                  
-                  class _ActivitiesScreenState extends State<ActivitiesScreen> {
-                    final TextEditingController _ctrl = TextEditingController();
-                    int? manualWeek;
-                  
-                    @override
-                    void dispose() {
-                      _ctrl.dispose();
-                      super.dispose();
-                    }
-                  
-                    int get currentWeek => manualWeek ?? widget.state.currentWeek;
-                  
-                    @override
-                    Widget build(BuildContext context) {
-                    final week = currentWeek;
-                    final range = widget.state.weekDateRange(week);
-                    final acts = widget.goal.activities;
-                
-                    return Scaffold(
-                      appBar: AppBar(
-                        title: Text('${widget.goal.title} – Vecka $week/12'),
-                      ),
-                      body: Column(
-                        children: [
-                          // Vecko-header
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    '${_fmtDate(range.start)} – ${_fmtDate(range.end)}',
-                                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-                                  ),
-                                ),
-                                Row(
-                                  children: [
-                                    IconButton(
-                                      tooltip: 'Föregående vecka',
-                                      onPressed: week > 1
-                                          ? () => setState(() => manualWeek = (week - 1))
-                                          : null,
-                                      icon: const Icon(Icons.chevron_left),
-                                    ),
-                                    Text('$week/12'),
-                                    IconButton(
-                                      tooltip: 'Nästa vecka',
-                                      onPressed: week < 12
-                                          ? () => setState(() => manualWeek = (week + 1))
-                                          : null,
-                                      icon: const Icon(Icons.chevron_right),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                
-                          // Ny aktivitet
-                          Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: _ctrl,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Ny aktivitet (titel)',
-                                      hintText: 'Ex: 30 min läsning / veckomöte / träning',
-                                    ),
-                                    onSubmitted: (_) async {
-                                      await widget.state.addActivity(
-                                        widget.category,
-                                        widget.goal.id,
-                                        _ctrl.text,
-                                        true, // default: planera alla veckor
-                                      );
-                                      _ctrl.clear();
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                FilledButton(
-                                  onPressed: () async {
-                                    await widget.state.addActivity(
-                                      widget.category,
-                                      widget.goal.id,
-                                      _ctrl.text,
-                                      true,
-                                    );
-                                    _ctrl.clear();
-                                  },
-                                  child: const Text('Lägg till'),
-                                ),
-                              ],
-                            ),
-                          ),
-                
-                          // Lista
-                          Expanded(
-                            child: acts.isEmpty
-                                ? const Center(
-                                    child: Text('Inga aktiviteter ännu. Lägg till ovan.'),
-                                  )
-                                : ListView.separated(
-                                    itemCount: acts.length,
-                                    separatorBuilder: (_, __) => const Divider(height: 1),
-                                    itemBuilder: (context, i) {
-                                      final a = acts[i];
-                                      final w = a.weeks[week - 1];
-                                      return ListTile(
-                                        contentPadding:
-                                            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                        title: Text(
-                                          a.title,
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.w700, fontSize: 16),
-                                        ),
-                                        subtitle: Row(
-                                          children: [
-                                            Row(
-                                              children: [
-                                                Switch(
-                                                  value: w.planned,
-                                                  onChanged: (v) => widget.state.togglePlanned(
-                                                      widget.category, widget.goal.id, a.id, week, v),
-                                                ),
-                                                const Text('Planerad'),
-                                              ],
-                                            ),
-                                            const SizedBox(width: 16),
-                                            Row(
-                                              children: [
-                                                Checkbox(
-                                                  value: w.done,
-                                                  onChanged: w.planned
-                                                      ? (v) => widget.state.toggleDone(
-                                                          widget.category,
-                                                          widget.goal.id,
-                                                          a.id,
-                                                          week,
-                                                          v ?? false)
-                                                      : null,
-                                                ),
-                                                const Text('Klar'),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                        trailing: IconButton(
-                                          tooltip: 'Radera aktivitet',
-                                          icon: const Icon(Icons.delete_outline),
-                                          onPressed: () => widget.state.removeActivity(
-                                              widget.category, widget.goal.id, a.id),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                          ),
-                
-                          // Footer – veckosammanfattning (utan minimi-krav)
-                          Builder(builder: (_) {
-                            final planned = acts.where((a) => a.weeks[week - 1].planned).length;
-                            final done = acts
-                                .where((a) => a.weeks[week - 1].planned && a.weeks[week - 1].done)
-                                .length;
-                            final pct = planned == 0 ? null : (done / planned);
-                            return Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade100,
-                                border: const Border(
-                                  top: BorderSide(color: Color(0xFFE5E7EB)),
-                                ),
-                              ),
-                              child: Text(
-                                'Veckans progression: '
-                                '${pct == null ? "–" : "${(pct * 100).round()}%"}  '
-                                '(Klara: $done / Planerade: $planned)',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(fontWeight: FontWeight.w700),
-                              ),
-                            );
-                          }),
-                        ],
-                      ),
-                    );
-                  }
-                }
-
-
+          
           /* =============================== COMMON UI =============================== */
-
+          
           class _LogoTitle extends StatelessWidget {
             const _LogoTitle();
-
+          
             @override
             Widget build(BuildContext context) {
               return Row(
@@ -1073,7 +1594,7 @@ jobs:
                       color: AppColors.primary,
                     ),
                   ),
-                  SizedBox(width: 8),
+                  SizedBox(width: AppSpacing.sm),
                   Text(
                     '12 veckor med Magnusson',
                     style: TextStyle(fontWeight: FontWeight.w700),
@@ -1082,27 +1603,28 @@ jobs:
               );
             }
           }
-
+          
           /* ============================== HELPERS ================================= */
-
+          
           DateTime _nearestMonday(DateTime d) {
             final wd = d.weekday; // 1=mån
-            final monday =
-                DateTime(d.year, d.month, d.day).subtract(Duration(days: wd - 1));
+            final monday = DateTime(d.year, d.month, d.day).subtract(Duration(days: wd - 1));
             return monday;
           }
-
+          
           String _fmtDate(DateTime d) {
             final y = d.year.toString().padLeft(4, '0');
             final m = d.month.toString().padLeft(2, '0');
             final dd = d.day.toString().padLeft(2, '0');
             return '$y-$m-$dd';
           }
-
+          
           int _weekFrom(DateTime startMonday) {
             final diff = DateTime.now().difference(startMonday).inDays;
             return ((diff ~/ 7) + 1);
           }
+          
+          
           DART
 
       - name: Build web
