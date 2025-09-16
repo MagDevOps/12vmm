@@ -1,394 +1,1084 @@
-name: Deploy Flutter Web (12 veckor med Magnusson)
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const MagnussonApp());
+}
 
-permissions:
-  contents: write
+/* ============================= THEME / COLORS ============================= */
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+class AppColors {
+  static const ink = Color(0xFF0B1220);
+  static const primary = Color(0xFF2563EB);
 
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          flutter-version: '3.24.3'
+  // Pasteller för nivå 2 ( enligt din specifikation )
+  static const familj = Color(0xFFFFCDD2);      // röd pastel – övre vänster
+  static const halsa = Color(0xFFC8E6C9);       // grön pastel – övre höger
+  static const karriar = Color(0xFFFFE0B2);     // orange pastel – nedre vänster
+  static const utveckling = Color(0xFFBBDEFB);  // blå pastel – nedre höger
+}
 
-      - name: Enable web
-        run: flutter config --enable-web
+/* ============================== DOMAIN MODEL ============================== */
 
-      # Skapa ett nytt Flutter-projekt (om källkod saknas)
-      - name: Scaffold Flutter web app
-        run: |
-          rm -rf *
-          flutter create tolv_veckor_med_magnusson --platforms=web
-          shopt -s dotglob
-          mv tolv_veckor_med_magnusson/* .
-          rmdir tolv_veckor_med_magnusson
+enum Category { familj, halsa, karriar, utveckling }
 
-      - name: Add dependencies
-        run: flutter pub add shared_preferences
+extension CategoryMeta on Category {
+  String get label {
+    switch (this) {
+      case Category.familj:
+        return 'Familj';
+      case Category.halsa:
+        return 'Hälsa';
+      case Category.karriar:
+        return 'Karriär';
+      case Category.utveckling:
+        return 'Utveckling';
+    }
+  }
 
-      # Skriv vår riktiga appkod
-      - name: Write main.dart (profil + 4 pastellrutor + aktivitetslista)
-        shell: bash
-        run: |
-          cat > lib/main.dart <<'DART'
-          import 'package:flutter/material.dart';
-          import 'package:shared_preferences/shared_preferences.dart';
+  Color get color {
+    switch (this) {
+      case Category.familj:
+        return AppColors.familj;
+      case Category.halsa:
+        return AppColors.halsa;
+      case Category.karriar:
+        return AppColors.karriar;
+      case Category.utveckling:
+        return AppColors.utveckling;
+    }
+  }
+}
 
-          void main() {
-            WidgetsFlutterBinding.ensureInitialized();
-            runApp(const MagnussonApp());
-          }
+String _newId() => DateTime.now().microsecondsSinceEpoch.toString();
 
-          class AppColors {
-            static const red = Color(0xFFFFCDD2);
-            static const yellow = Color(0xFFFFF9C4);
-            static const green = Color(0xFFC8E6C9);
-            static const blue = Color(0xFFBBDEFB);
-            static const ink = Color(0xFF0B1220);
-            static const primary = Color(0xFF2563EB);
-          }
+class WeekActivity {
+  // planned == true betyder att aktiviteten ingår denna vecka
+  bool planned;
+  // done == true betyder att den är avklarad denna vecka
+  bool done;
 
-          enum Category { studier, arbete, halsa, familj }
+  WeekActivity({this.planned = false, this.done = false});
 
-          extension CategoryMeta on Category {
-            String get title {
-              switch (this) {
-                case Category.studier: return "Studier";
-                case Category.arbete:  return "Arbete";
-                case Category.halsa:   return "Hälsa";
-                case Category.familj:  return "Familj";
-              }
-            }
-            Color get color {
-              switch (this) {
-                case Category.studier: return AppColors.red;
-                case Category.arbete:  return AppColors.yellow;
-                case Category.halsa:   return AppColors.green;
-                case Category.familj:  return AppColors.blue;
-              }
-            }
-            String get storageKey {
-              switch (this) {
-                case Category.studier: return "activities_studier";
-                case Category.arbete:  return "activities_arbete";
-                case Category.halsa:   return "activities_halsa";
-                case Category.familj:  return "activities_familj";
-              }
-            }
-          }
+  Map<String, dynamic> toJson() => {'p': planned, 'd': done};
+  factory WeekActivity.fromJson(Map<String, dynamic> j) =>
+      WeekActivity(planned: j['p'] ?? false, done: j['d'] ?? false);
+}
 
-          class AppState extends ChangeNotifier {
-            String? name;
-            final Map<Category, List<String>> _items = {
-              Category.studier: [],
-              Category.arbete:  [],
-              Category.halsa:   [],
-              Category.familj:  [],
+class Activity {
+  String id;
+  String title;
+  // 12 veckor
+  List<WeekActivity> weeks;
+
+  Activity({
+    required this.id,
+    required this.title,
+    List<WeekActivity>? weeks,
+  }) : weeks = weeks ?? List.generate(12, (_) => WeekActivity());
+
+  Map<String, dynamic> toJson() =>
+      {'id': id, 't': title, 'w': weeks.map((e) => e.toJson()).toList()};
+
+  factory Activity.fromJson(Map<String, dynamic> j) => Activity(
+        id: j['id'] as String,
+        title: j['t'] as String,
+        weeks: (j['w'] as List)
+            .map((x) => WeekActivity.fromJson(Map<String, dynamic>.from(x)))
+            .toList(),
+      );
+}
+
+class Goal {
+  String id;
+  String title;
+  List<Activity> activities;
+
+  Goal({required this.id, required this.title, List<Activity>? activities})
+      : activities = activities ?? [];
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        't': title,
+        'a': activities.map((e) => e.toJson()).toList(),
+      };
+
+  factory Goal.fromJson(Map<String, dynamic> j) => Goal(
+        id: j['id'] as String,
+        title: j['t'] as String,
+        activities: (j['a'] as List)
+            .map((x) => Activity.fromJson(Map<String, dynamic>.from(x)))
+            .toList(),
+      );
+}
+
+class UserProfile {
+  String id;
+  String name;
+  DateTime startMonday; // styr 12-veckorsperiod och "aktuell vecka"
+  Map<Category, List<Goal>> goalsByCat;
+
+  UserProfile({
+    required this.id,
+    required this.name,
+    required this.startMonday,
+    Map<Category, List<Goal>>? goalsByCat,
+  }) : goalsByCat = goalsByCat ??
+            {
+              Category.familj: [],
+              Category.halsa: [],
+              Category.karriar: [],
+              Category.utveckling: [],
             };
 
-            AppState() { _load(); }
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'n': name,
+        's': startMonday.toIso8601String(),
+        'g': {
+          'familj': goalsByCat[Category.familj]!.map((e) => e.toJson()).toList(),
+          'halsa': goalsByCat[Category.halsa]!.map((e) => e.toJson()).toList(),
+          'karriar':
+              goalsByCat[Category.karriar]!.map((e) => e.toJson()).toList(),
+          'utveckling': goalsByCat[Category.utveckling]!
+              .map((e) => e.toJson())
+              .toList(),
+        }
+      };
 
-            Future<void> _load() async {
-              final p = await SharedPreferences.getInstance();
-              name = p.getString('profile_name');
-              for (final c in Category.values) {
-                _items[c] = p.getStringList(c.storageKey) ?? [];
-              }
-              notifyListeners();
-            }
+  factory UserProfile.fromJson(Map<String, dynamic> j) => UserProfile(
+        id: j['id'] as String,
+        name: j['n'] as String,
+        startMonday: DateTime.parse(j['s'] as String),
+        goalsByCat: {
+          Category.familj: (j['g']['familj'] as List)
+              .map((x) => Goal.fromJson(Map<String, dynamic>.from(x)))
+              .toList(),
+          Category.halsa: (j['g']['halsa'] as List)
+              .map((x) => Goal.fromJson(Map<String, dynamic>.from(x)))
+              .toList(),
+          Category.karriar: (j['g']['karriar'] as List)
+              .map((x) => Goal.fromJson(Map<String, dynamic>.from(x)))
+              .toList(),
+          Category.utveckling: (j['g']['utveckling'] as List)
+              .map((x) => Goal.fromJson(Map<String, dynamic>.from(x)))
+              .toList(),
+        },
+      );
+}
 
-            Future<void> saveName(String v) async {
-              final p = await SharedPreferences.getInstance();
-              name = v.trim().isEmpty ? null : v.trim();
-              await p.setString('profile_name', name ?? "");
-              notifyListeners();
-            }
+/* ============================== APP STATE ============================== */
 
-            List<String> items(Category c) => List.unmodifiable(_items[c]!);
+class AppState extends ChangeNotifier {
+  static const _kUsersKey = 'users_v1';
 
-            Future<void> add(Category c, String text) async {
-              final t = text.trim(); if (t.isEmpty) return;
-              _items[c]!.add(t);
-              final p = await SharedPreferences.getInstance();
-              await p.setStringList(c.storageKey, _items[c]!);
-              notifyListeners();
-            }
+  final Map<String, UserProfile> _users = {}; // id -> user
+  String? currentUserId;
 
-            Future<void> remove(Category c, int i) async {
-              if (i<0 || i>=_items[c]!.length) return;
-              _items[c]!.removeAt(i);
-              final p = await SharedPreferences.getInstance();
-              await p.setStringList(c.storageKey, _items[c]!);
-              notifyListeners();
-            }
+  // ---------- persistence ----------
+  Future<void> load() async {
+    final p = await SharedPreferences.getInstance();
+    final raw = p.getString(_kUsersKey);
+    if (raw != null && raw.isNotEmpty) {
+      final list = (jsonDecode(raw) as List).cast<Map>();
+      for (final m in list) {
+        final u = UserProfile.fromJson(Map<String, dynamic>.from(m));
+        _users[u.id] = u;
+      }
+    }
+    notifyListeners();
+  }
 
-            bool get hasProfile => (name!=null && name!.isNotEmpty);
-          }
+  Future<void> _save() async {
+    final p = await SharedPreferences.getInstance();
+    final list = _users.values.map((u) => u.toJson()).toList();
+    await p.setString(_kUsersKey, jsonEncode(list));
+  }
 
-          class MagnussonApp extends StatefulWidget {
-            const MagnussonApp({super.key});
-            @override State<MagnussonApp> createState() => _MagnussonAppState();
-          }
+  // ---------- users ----------
+  List<UserProfile> get users =>
+      _users.values.toList()..sort((a, b) => a.name.compareTo(b.name));
 
-          class _MagnussonAppState extends State<MagnussonApp> {
-            final AppState state = AppState();
-            @override
-            Widget build(BuildContext context) {
-              return AnimatedBuilder(
-                animation: state,
-                builder: (context, _) {
-                  return MaterialApp(
-                    debugShowCheckedModeBanner: false,
-                    title: "12 veckor med Magnusson",
-                    theme: ThemeData(
-                      useMaterial3: true,
-                      colorScheme: ColorScheme.fromSeed(seedColor: AppColors.primary),
-                      appBarTheme: const AppBarTheme(
-                        centerTitle: true,
-                        backgroundColor: Colors.white,
-                        foregroundColor: AppColors.ink,
-                        elevation: 0.5,
+  Future<void> addUser(String name) async {
+    final id = _newId();
+    final start = _nearestMonday(DateTime.now());
+    _users[id] = UserProfile(id: id, name: name.trim(), startMonday: start);
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> removeUser(String id) async {
+    _users.remove(id);
+    if (currentUserId == id) currentUserId = null;
+    await _save();
+    notifyListeners();
+  }
+
+  void selectUser(String id) {
+    currentUserId = id;
+    notifyListeners();
+  }
+
+  UserProfile? get currentUser =>
+      currentUserId == null ? null : _users[currentUserId];
+
+  Future<void> setStartMonday(DateTime d) async {
+    if (currentUser == null) return;
+    currentUser!.startMonday = _nearestMonday(d);
+    await _save();
+    notifyListeners();
+  }
+
+  // ---------- goals & activities ----------
+  Future<void> addGoal(Category c, String title) async {
+    final u = currentUser!;
+    u.goalsByCat[c]!.add(Goal(id: _newId(), title: title));
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> removeGoal(Category c, String goalId) async {
+    final u = currentUser!;
+    u.goalsByCat[c]!.removeWhere((g) => g.id == goalId);
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> addActivity(
+      Category c, String goalId, String title, bool planAllWeeks) async {
+    final u = currentUser!;
+    final g = u.goalsByCat[c]!.firstWhere((g) => g.id == goalId);
+    final a = Activity(id: _newId(), title: title);
+    if (planAllWeeks) {
+      for (final w in a.weeks) {
+        w.planned = true;
+      }
+    }
+    g.activities.add(a);
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> togglePlanned(
+      Category c, String goalId, String activityId, int week, bool v) async {
+    final a = _findAct(c, goalId, activityId);
+    a.weeks[week - 1].planned = v;
+    if (!v) a.weeks[week - 1].done = false;
+    await _save();
+    notifyListeners();
+  }
+
+  Future<void> toggleDone(
+      Category c, String goalId, String activityId, int week, bool v) async {
+    final a = _findAct(c, goalId, activityId);
+    if (a.weeks[week - 1].planned) {
+      a.weeks[week - 1].done = v;
+      await _save();
+      notifyListeners();
+    }
+  }
+
+  Future<void> removeActivity(
+      Category c, String goalId, String activityId) async {
+    final u = currentUser!;
+    final g = u.goalsByCat[c]!.firstWhere((g) => g.id == goalId);
+    g.activities.removeWhere((x) => x.id == activityId);
+    await _save();
+    notifyListeners();
+  }
+
+  Activity _findAct(Category c, String goalId, String actId) {
+    final u = currentUser!;
+    final g = u.goalsByCat[c]!.firstWhere((g) => g.id == goalId);
+    return g.activities.firstWhere((a) => a.id == actId);
+  }
+
+  // ---------- week / progress ----------
+  int get currentWeek {
+    final u = currentUser;
+    if (u == null) return 1;
+    final today = DateTime.now();
+    final diff = today.difference(u.startMonday).inDays;
+    final w = (diff ~/ 7) + 1;
+    return w.clamp(1, 12);
+  }
+
+  DateTimeRange weekDateRange(int week) {
+    final start = currentUser!.startMonday.add(Duration(days: (week - 1) * 7));
+    final end = start.add(const Duration(days: 6));
+    return DateTimeRange(start: start, end: end);
+  }
+
+  // Veckoprocent per kategori: done/planned (planerad==0 -> null)
+  double? categoryWeekPercent(Category c, int week) {
+    final u = currentUser!;
+    int planned = 0;
+    int done = 0;
+    for (final g in u.goalsByCat[c]!) {
+      for (final a in g.activities) {
+        if (a.weeks[week - 1].planned) {
+          planned++;
+          if (a.weeks[week - 1].done) done++;
+        }
+      }
+    }
+    if (planned == 0) return null;
+    return done / planned;
+  }
+}
+
+/* ================================ WIDGETS ================================ */
+
+class MagnussonApp extends StatefulWidget {
+  const MagnussonApp({super.key});
+  @override
+  State<MagnussonApp> createState() => _MagnussonAppState();
+}
+
+class _MagnussonAppState extends State<MagnussonApp> {
+  final AppState state = AppState();
+
+  @override
+  void initState() {
+    super.initState();
+    state.load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: state,
+      builder: (context, _) {
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: '12 veckor med Magnusson',
+          theme: ThemeData(
+            useMaterial3: true,
+            colorScheme: ColorScheme.fromSeed(seedColor: AppColors.primary),
+            appBarTheme: const AppBarTheme(
+              centerTitle: true,
+              backgroundColor: Colors.white,
+              foregroundColor: AppColors.ink,
+              elevation: 0.5,
+            ),
+            scaffoldBackgroundColor: const Color(0xFFF8FAFC),
+            inputDecorationTheme: const InputDecorationTheme(
+              border: OutlineInputBorder(),
+            ),
+          ),
+          home: state.currentUser == null
+              ? UserSelectScreen(state: state)
+              : CategoryScreen(state: state),
+        );
+      },
+    );
+  }
+}
+
+/* ================================ LEVEL 1 ================================ */
+
+class UserSelectScreen extends StatefulWidget {
+  final AppState state;
+  const UserSelectScreen({super.key, required this.state});
+
+  @override
+  State<UserSelectScreen> createState() => _UserSelectScreenState();
+}
+
+class _UserSelectScreenState extends State<UserSelectScreen> {
+  final TextEditingController _name = TextEditingController();
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  Future<void> _create() async {
+    final v = _name.text.trim();
+    if (v.isEmpty) return;
+    await widget.state.addUser(v);
+    _name.clear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final users = widget.state.users;
+    return Scaffold(
+      appBar: AppBar(title: const _LogoTitle()),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 680),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                const Text(
+                  'Användare',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _name,
+                        decoration: const InputDecoration(
+                          labelText: 'Namn (skapa ny användare)',
+                          hintText: 'Skriv ditt namn',
+                        ),
+                        onSubmitted: (_) => _create(),
                       ),
-                      scaffoldBackgroundColor: const Color(0xFFF8FAFC),
-                      inputDecorationTheme: const InputDecorationTheme(border: OutlineInputBorder()),
                     ),
-                    home: state.hasProfile
-                      ? DashboardScreen(state: state)
-                      : ProfileScreen(state: state),
-                  );
-                },
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: _create,
+                      child: const Text('Skapa'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: users.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'Inga användare ännu.\nSkapa en profil ovan.',
+                            textAlign: TextAlign.center,
+                          ),
+                        )
+                      : ListView.separated(
+                          itemCount: users.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, i) {
+                            final u = users[i];
+                            return ListTile(
+                              title: Text(u.name),
+                              subtitle: Text(
+                                  'Start: ${_fmtDate(u.startMonday)} (vecka ${_weekFrom(u.startMonday).clamp(1, 12)}/12)'),
+                              leading: CircleAvatar(
+                                backgroundColor: Colors.grey.shade200,
+                                child: Text(
+                                  u.name.characters.first.toUpperCase(),
+                                  style: const TextStyle(color: AppColors.ink),
+                                ),
+                              ),
+                              trailing: Wrap(
+                                spacing: 8,
+                                children: [
+                                  // Radera (rund ikon med kryss)
+                                  CircleAvatar(
+                                    radius: 16,
+                                    backgroundColor: Colors.red.shade50,
+                                    child: IconButton(
+                                      padding: EdgeInsets.zero,
+                                      iconSize: 18,
+                                      color: Colors.red.shade700,
+                                      icon: const Icon(Icons.close),
+                                      onPressed: () async {
+                                        final ok = await showDialog<bool>(
+                                              context: context,
+                                              builder: (c) => AlertDialog(
+                                                title: const Text('Radera användare?'),
+                                                content: Text(
+                                                    'Detta tar bort all lokal data för "${u.name}".\nVill du fortsätta?'),
+                                                actions: [
+                                                  TextButton(
+                                                      onPressed: () =>
+                                                          Navigator.pop(c, false),
+                                                      child: const Text('Avbryt')),
+                                                  FilledButton(
+                                                      onPressed: () =>
+                                                          Navigator.pop(c, true),
+                                                      child: const Text('Radera')),
+                                                ],
+                                              ),
+                                            ) ??
+                                            false;
+                                        if (ok) {
+                                          await widget.state.removeUser(u.id);
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                  // Grön pil – fortsätt
+                                  IconButton(
+                                    tooltip: 'Fortsätt',
+                                    icon: const Icon(
+                                      Icons.arrow_circle_right,
+                                      color: Colors.green,
+                                    ),
+                                    onPressed: () {
+                                      widget.state.selectUser(u.id);
+                                      Navigator.pushReplacement(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              CategoryScreen(state: widget.state),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/* ================================ LEVEL 2 ================================ */
+
+class CategoryScreen extends StatelessWidget {
+  final AppState state;
+  const CategoryScreen({super.key, required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final week = state.currentWeek;
+    final range = state.weekDateRange(week);
+    final user = state.currentUser!;
+    return Scaffold(
+      appBar: AppBar(
+        title: const _LogoTitle(),
+        actions: [
+          IconButton(
+            tooltip: 'Byt användare',
+            icon: const Icon(Icons.switch_account_outlined),
+            onPressed: () {
+              state.selectUser('');
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => UserSelectScreen(state: state)),
               );
-            }
-          }
+            },
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // Överkant med vecka och datum
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Vecka $week/12 · ${_fmtDate(range.start)} – ${_fmtDate(range.end)}',
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      helpText: 'Välj startmåndag',
+                      firstDate: DateTime(DateTime.now().year - 1),
+                      lastDate: DateTime(DateTime.now().year + 1),
+                      initialDate: user.startMonday,
+                    );
+                    if (picked != null) {
+                      await state.setStartMonday(picked);
+                    }
+                  },
+                  icon: const Icon(Icons.calendar_month_outlined),
+                  label: const Text('Startmåndag'),
+                )
+              ],
+            ),
+          ),
+          Expanded(
+            child: GridView.count(
+              crossAxisCount: 2,
+              childAspectRatio: 1.0,
+              padding: const EdgeInsets.all(16),
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              children: [
+                _CategoryTile2(
+                    state: state, c: Category.familj, outline: true),
+                _CategoryTile2(
+                    state: state, c: Category.halsa, outline: true),
+                _CategoryTile2(
+                    state: state, c: Category.karriar, outline: true),
+                _CategoryTile2(
+                    state: state, c: Category.utveckling, outline: true),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-          class ProfileScreen extends StatefulWidget {
-            final AppState state;
-            const ProfileScreen({super.key, required this.state});
-            @override State<ProfileScreen> createState() => _ProfileScreenState();
-          }
+class _CategoryTile2 extends StatelessWidget {
+  final AppState state;
+  final Category c;
+  final bool outline;
+  const _CategoryTile2(
+      {required this.state, required this.c, this.outline = false});
 
-          class _ProfileScreenState extends State<ProfileScreen> {
-            final _name = TextEditingController();
-            @override
-            void dispose() { _name.dispose(); super.dispose(); }
-            @override
-            Widget build(BuildContext context) {
-              return Scaffold(
-                appBar: AppBar(title: const _LogoTitle()),
-                body: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 480),
-                    child: Card(
-                      elevation: 2, margin: const EdgeInsets.all(16),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
+  @override
+  Widget build(BuildContext context) {
+    final p = state.categoryWeekPercent(c, state.currentWeek);
+    final percentText = (p == null) ? '–' : '${(p * 100).round()}%';
+    return Material(
+      color: c.color,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: outline
+            ? const BorderSide(color: Colors.black, width: 1)
+            : BorderSide.none,
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => GoalsScreen(state: state, category: c),
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Stack(
+            children: [
+              Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      c.label,
+                      style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.ink),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Veckans framgång: $percentText',
+                      style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.ink),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/* ================================ LEVEL 3 ================================ */
+
+class GoalsScreen extends StatefulWidget {
+  final AppState state;
+  final Category category;
+  const GoalsScreen({super.key, required this.state, required this.category});
+
+  @override
+  State<GoalsScreen> createState() => _GoalsScreenState();
+}
+
+class _GoalsScreenState extends State<GoalsScreen> {
+  final TextEditingController _ctrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _add() async {
+    final v = _ctrl.text.trim();
+    if (v.isEmpty) return;
+    await widget.state.addGoal(widget.category, v);
+    _ctrl.clear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final goals =
+        widget.state.currentUser!.goalsByCat[widget.category] ?? <Goal>[];
+    return Scaffold(
+      appBar: AppBar(title: Text('${widget.category.label} – Mål')),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _ctrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Nytt mål',
+                      hintText: 'Skriv ett mål för kategorin',
+                    ),
+                    onSubmitted: (_) => _add(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(onPressed: _add, child: const Text('Skapa mål')),
+              ],
+            ),
+          ),
+          Expanded(
+            child: goals.isEmpty
+                ? const Center(child: Text('Inga mål ännu. Lägg till ett ovan.'))
+                : ListView.separated(
+                    itemCount: goals.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, i) {
+                      final g = goals[i];
+                      return ListTile(
+                        title: Text(g.title),
+                        leading: const Icon(Icons.flag_outlined),
+                        trailing: Wrap(
+                          spacing: 8,
                           children: [
-                            const Text("Skapa profil", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
-                            const SizedBox(height: 12),
-                            TextField(
-                              controller: _name,
-                              decoration: const InputDecoration(labelText: "Namn", hintText: "Skriv ditt namn"),
-                              onSubmitted: (_) async {
-                                await widget.state.saveName(_name.text);
-                                if (!mounted) return;
-                                Navigator.pushReplacement(context, MaterialPageRoute(
-                                  builder: (_) => DashboardScreen(state: widget.state),
-                                ));
+                            IconButton(
+                              tooltip: 'Aktiviteter',
+                              icon: const Icon(Icons.checklist_outlined),
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => ActivitiesScreen(
+                                      state: widget.state,
+                                      category: widget.category,
+                                      goal: g,
+                                    ),
+                                  ),
+                                );
                               },
                             ),
-                            const SizedBox(height: 16),
-                            SizedBox(
-                              width: double.infinity,
-                              child: FilledButton(
-                                onPressed: () async {
-                                  await widget.state.saveName(_name.text);
-                                  if (!mounted) return;
-                                  Navigator.pushReplacement(context, MaterialPageRoute(
-                                    builder: (_) => DashboardScreen(state: widget.state),
-                                  ));
-                                },
-                                child: const Text("Fortsätt"),
-                              ),
+                            IconButton(
+                              tooltip: 'Radera mål',
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: () async {
+                                final ok = await showDialog<bool>(
+                                      context: context,
+                                      builder: (c) => AlertDialog(
+                                        title: const Text('Radera mål?'),
+                                        content: Text(
+                                            'Detta tar bort "${g.title}" och tillhörande aktiviteter.'),
+                                        actions: [
+                                          TextButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(c, false),
+                                              child: const Text('Avbryt')),
+                                          FilledButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(c, true),
+                                              child: const Text('Radera')),
+                                        ],
+                                      ),
+                                    ) ??
+                                    false;
+                                if (ok) {
+                                  await widget.state
+                                      .removeGoal(widget.category, g.id);
+                                }
+                              },
                             ),
-                            const SizedBox(height: 8),
-                            const Text("Sparas lokalt i webbläsaren (Local Storage).", style: TextStyle(fontSize: 12, color: Colors.black54)),
                           ],
                         ),
-                      ),
-                    ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/* ================================ LEVEL 4 ================================ */
+
+class ActivitiesScreen extends StatefulWidget {
+  final AppState state;
+  final Category category;
+  final Goal goal;
+
+  const ActivitiesScreen(
+      {super.key,
+      required this.state,
+      required this.category,
+      required this.goal});
+
+  @override
+  State<ActivitiesScreen> createState() => _ActivitiesScreenState();
+}
+
+class _ActivitiesScreenState extends State<ActivitiesScreen> {
+  final TextEditingController _ctrl = TextEditingController();
+  int? manualWeek; // om användaren vill hoppa mellan veckor
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  int get currentWeek => manualWeek ?? widget.state.currentWeek;
+
+  @override
+  Widget build(BuildContext context) {
+    final week = currentWeek;
+    final range = widget.state.weekDateRange(week);
+    final acts = widget.goal.activities;
+
+    // Regler: minst 2 planerade per vecka
+    final plannedCount = acts
+        .where((a) => a.weeks[week - 1].planned)
+        .length;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('${widget.goal.title} – Vecka $week/12'),
+      ),
+      body: Column(
+        children: [
+          // Vecko-header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${_fmtDate(range.start)} – ${_fmtDate(range.end)}',
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w700),
                   ),
                 ),
-              );
-            }
-          }
-
-          class DashboardScreen extends StatelessWidget {
-            final AppState state;
-            const DashboardScreen({super.key, required this.state});
-            @override
-            Widget build(BuildContext context) {
-              final hi = state.name==null || state.name!.isEmpty ? "Hej!" : "Hej, ${state.name!}";
-              return Scaffold(
-                appBar: AppBar(title: const _LogoTitle()),
-                body: Column(
+                Row(
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                      child: Row(children: [
-                        Text(hi, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-                      ]),
+                    IconButton(
+                      tooltip: 'Föregående vecka',
+                      onPressed: week > 1
+                          ? () => setState(() => manualWeek = (week - 1))
+                          : null,
+                      icon: const Icon(Icons.chevron_left),
                     ),
-                    Expanded(
-                      child: GridView.count(
-                        crossAxisCount: 2,
-                        padding: const EdgeInsets.all(16),
-                        crossAxisSpacing: 12, mainAxisSpacing: 12,
-                        children: [
-                          _CategoryTile(c: Category.studier, state: state),
-                          _CategoryTile(c: Category.arbete,  state: state),
-                          _CategoryTile(c: Category.halsa,   state: state),
-                          _CategoryTile(c: Category.familj,  state: state),
-                        ],
-                      ),
+                    Text('$week/12'),
+                    IconButton(
+                      tooltip: 'Nästa vecka',
+                      onPressed: week < 12
+                          ? () => setState(() => manualWeek = (week + 1))
+                          : null,
+                      icon: const Icon(Icons.chevron_right),
                     ),
                   ],
                 ),
-              );
-            }
-          }
+              ],
+            ),
+          ),
 
-          class _CategoryTile extends StatelessWidget {
-            final Category c; final AppState state;
-            const _CategoryTile({required this.c, required this.state});
-            @override
-            Widget build(BuildContext context) {
-              return Material(
-                color: c.color, borderRadius: BorderRadius.circular(16),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(16),
-                  onTap: () => Navigator.push(context, MaterialPageRoute(
-                    builder: (_) => ActivityScreen(state: state, c: c),
-                  )),
-                  child: Center(
-                    child: Text(c.title, textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.ink),
+          if (plannedCount < 2)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF3C7),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.shade300),
+              ),
+              child: Text(
+                'Planera minst 2 aktiviteter denna vecka (nu: $plannedCount).',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+
+          // Ny aktivitet
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _ctrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Ny aktivitet (titel)',
+                      hintText: 'Ex: 30 min läsning / veckomöte / träning',
                     ),
+                    onSubmitted: (_) async {
+                      await widget.state.addActivity(
+                        widget.category,
+                        widget.goal.id,
+                        _ctrl.text,
+                        true, // default: planera alla veckor
+                      );
+                      _ctrl.clear();
+                    },
                   ),
                 ),
-              );
-            }
-          }
-
-          class ActivityScreen extends StatefulWidget {
-            final AppState state; final Category c;
-            const ActivityScreen({super.key, required this.state, required this.c});
-            @override State<ActivityScreen> createState() => _ActivityScreenState();
-          }
-
-          class _ActivityScreenState extends State<ActivityScreen> {
-            final _ctrl = TextEditingController();
-            @override void dispose(){ _ctrl.dispose(); super.dispose(); }
-            @override
-            Widget build(BuildContext context) {
-              final items = widget.state.items(widget.c);
-              return Scaffold(
-                appBar: AppBar(title: Text("${widget.c.title} – 12+M")),
-                body: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _ctrl,
-                              decoration: const InputDecoration(
-                                labelText: "Beskrivning av aktivitet",
-                                hintText: "Ex: Läsa 20 sidor byggfysik",
-                              ),
-                              onSubmitted: (_) async {
-                                await widget.state.add(widget.c, _ctrl.text);
-                                _ctrl.clear();
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          FilledButton(
-                            onPressed: () async {
-                              await widget.state.add(widget.c, _ctrl.text);
-                              _ctrl.clear();
-                            },
-                            child: const Text("Lägg till"),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: ListView.separated(
-                        itemCount: items.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, i) {
-                          final t = items[i];
-                          return ListTile(
-                            title: Text(t),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.delete_outline),
-                              onPressed: () => widget.state.remove(widget.c, i),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: () async {
+                    await widget.state.addActivity(
+                      widget.category,
+                      widget.goal.id,
+                      _ctrl.text,
+                      true,
+                    );
+                    _ctrl.clear();
+                  },
+                  child: const Text('Lägg till'),
                 ),
-              );
-            }
-          }
+              ],
+            ),
+          ),
 
-          class _LogoTitle extends StatelessWidget {
-            const _LogoTitle();
-            @override
-            Widget build(BuildContext context) {
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Text("12+M", style: TextStyle(fontWeight: FontWeight.w900, color: AppColors.primary)),
-                  SizedBox(width: 8),
-                  Text("12 veckor med Magnusson", style: TextStyle(fontWeight: FontWeight.w700)),
-                ],
-              );
-            }
-          }
-          DART
+          // Lista
+          Expanded(
+            child: acts.isEmpty
+                ? const Center(
+                    child: Text('Inga aktiviteter ännu. Lägg till ovan.'),
+                  )
+                : ListView.separated(
+                    itemCount: acts.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, i) {
+                      final a = acts[i];
+                      final w = a.weeks[week - 1];
+                      return ListTile(
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        title: Text(a.title,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 16)),
+                        subtitle: Row(
+                          children: [
+                            // Planerad denna vecka
+                            Row(
+                              children: [
+                                Switch(
+                                  value: w.planned,
+                                  onChanged: (v) => widget.state.togglePlanned(
+                                      widget.category, widget.goal.id, a.id, week, v),
+                                ),
+                                const Text('Planerad'),
+                              ],
+                            ),
+                            const SizedBox(width: 16),
+                            // Klar
+                            Row(
+                              children: [
+                                Checkbox(
+                                  value: w.done,
+                                  onChanged: w.planned
+                                      ? (v) => widget.state.toggleDone(widget.category,
+                                          widget.goal.id, a.id, week, v ?? false)
+                                      : null,
+                                ),
+                                const Text('Klar'),
+                              ],
+                            ),
+                          ],
+                        ),
+                        trailing: IconButton(
+                          tooltip: 'Radera aktivitet',
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () => widget.state.removeActivity(
+                              widget.category, widget.goal.id, a.id),
+                        ),
+                      );
+                    },
+                  ),
+          ),
 
-      - name: Brand PWA (manifest + theme-color)
-        run: |
-          jq \
-            --arg name  "12 veckor med Magnusson" \
-            --arg short "12+M" \
-            --arg url   "/${{ github.event.repository.name }}/" \
-            '.name=$name | .short_name=$short | .start_url=$url | .theme_color="#2563EB" | .background_color="#FFFFFF"' \
-            web/manifest.json > web/manifest.json.new
-          mv web/manifest.json.new web/manifest.json
-          sed -i 's#<meta name="theme-color" content="[^"]*"#<meta name="theme-color" content="#2563EB"#' web/index.html || true
+          // Footer – veckosammanfattning för denna målvy
+          Builder(builder: (_) {
+            final planned = acts.where((a) => a.weeks[week - 1].planned).length;
+            final done = acts
+                .where((a) => a.weeks[week - 1].planned && a.weeks[week - 1].done)
+                .length;
+            final pct = planned == 0 ? null : (done / planned);
+            return Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                border: const Border(
+                  top: BorderSide(color: Color(0xFFE5E7EB)),
+                ),
+              ),
+              child: Text(
+                'Veckans progression: '
+                '${pct == null ? "–" : "${(pct * 100).round()}%"}  '
+                '(Klara: $done / Planerade: $planned)',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
 
-      - name: Build web
-        run: flutter build web --release --base-href=/${{ github.event.repository.name }}/
+/* =============================== COMMON UI =============================== */
 
-      - name: Deploy to gh-pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: build/web
+class _LogoTitle extends StatelessWidget {
+  const _LogoTitle();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: const [
+        Text(
+          '12+M',
+          style: TextStyle(
+            fontWeight: FontWeight.w900,
+            color: AppColors.primary,
+          ),
+        ),
+        SizedBox(width: 8),
+        Text(
+          '12 veckor med Magnusson',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ],
+    );
+  }
+}
+
+/* ============================== HELPERS ================================= */
+
+DateTime _nearestMonday(DateTime d) {
+  // Gå bakåt till måndag den aktuella veckan
+  final wd = d.weekday; // 1=mån
+  final monday = DateTime(d.year, d.month, d.day).subtract(Duration(days: wd - 1));
+  return monday;
+}
+
+String _fmtDate(DateTime d) {
+  final y = d.year.toString().padLeft(4, '0');
+  final m = d.month.toString().padLeft(2, '0');
+  final dd = d.day.toString().padLeft(2, '0');
+  return '$y-$m-$dd';
+}
+
+int _weekFrom(DateTime startMonday) {
+  final diff = DateTime.now().difference(startMonday).inDays;
+  return ((diff ~/ 7) + 1);
+}
