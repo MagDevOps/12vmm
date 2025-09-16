@@ -1,401 +1,46 @@
-name: Create & Deploy Flutter Web (12 veckor med Magnusson)
+name: Deploy Flutter Web
 
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
 
-jobs:
-  build-deploy:
-    runs-on: ubuntu-latest
+permissions:
+  contents: write
 
+jobs:
+  build:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
       - name: Setup Flutter
-  uses: subosito/flutter-action@v2
-  with:
-    flutter-version: '3.24.3'
-    channel: stable
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.24.3'
 
       - name: Enable web
         run: flutter config --enable-web
 
-      - name: Create Flutter project
+      # Skapa ett tomt Flutter-projekt om repot saknar pubspec.yaml (för mobilredigering)
+      - name: Ensure project exists
         run: |
-          rm -rf *
-          flutter create tolv_veckor_med_magnusson --platforms=web
-          shopt -s dotglob
-          mv tolv_veckor_med_magnusson/* .
-          rmdir tolv_veckor_med_magnusson
+          if [ ! -f pubspec.yaml ]; then
+            flutter create app --platforms=web
+            shopt -s dotglob
+            mv app/* .
+            rmdir app
+          fi
 
-      - name: Add deps
-        run: flutter pub add shared_preferences
-
-      - name: Write main.dart (app-namn + 4 pastellrutor + profilsida)
-        shell: bash
-        run: |
-          cat > lib/main.dart <<'DART'
-          import 'package:flutter/material.dart';
-          import 'package:shared_preferences/shared_preferences.dart';
-
-          void main() {
-            WidgetsFlutterBinding.ensureInitialized();
-            runApp(const MagnussonApp());
-          }
-
-          class AppColors {
-            static const red = Color(0xFFFFCDD2);
-            static const yellow = Color(0xFFFFF9C4);
-            static const green = Color(0xFFC8E6C9);
-            static const blue = Color(0xFFBBDEFB);
-            static const ink = Color(0xFF0B1220);
-            static const primary = Color(0xFF2563EB);
-          }
-
-          enum Category { studier, arbete, halsa, familj }
-
-          extension CategoryMeta on Category {
-            String get title {
-              switch (this) {
-                case Category.studier: return "Studier";
-                case Category.arbete:  return "Arbete";
-                case Category.halsa:   return "Hälsa";
-                case Category.familj:  return "Familj";
-              }
-            }
-            Color get color {
-              switch (this) {
-                case Category.studier: return AppColors.red;
-                case Category.arbete:  return AppColors.yellow;
-                case Category.halsa:   return AppColors.green;
-                case Category.familj:  return AppColors.blue;
-              }
-            }
-            String get storageKey {
-              switch (this) {
-                case Category.studier: return "activities_studier";
-                case Category.arbete:  return "activities_arbete";
-                case Category.halsa:   return "activities_halsa";
-                case Category.familj:  return "activities_familj";
-              }
-            }
-          }
-
-          class AppState extends ChangeNotifier {
-            String? name;
-            String? email;
-            final Map<Category, List<String>> _activities = {
-              Category.studier: [],
-              Category.arbete:  [],
-              Category.halsa:   [],
-              Category.familj:  [],
-            };
-
-            Future<void> load() async {
-              final prefs = await SharedPreferences.getInstance();
-              name = prefs.getString('profile_name');
-              email = prefs.getString('profile_email');
-              for (final c in Category.values) {
-                _activities[c] = prefs.getStringList(c.storageKey) ?? [];
-              }
-              notifyListeners();
-            }
-
-            Future<void> saveProfile({required String name, String? email}) async {
-              final prefs = await SharedPreferences.getInstance();
-              this.name = name.trim().isEmpty ? null : name.trim();
-              this.email = (email ?? '').trim().isEmpty ? null : email?.trim();
-              await prefs.setString('profile_name', this.name ?? "");
-              await prefs.setString('profile_email', this.email ?? "");
-              notifyListeners();
-            }
-
-            List<String> activities(Category c) => List.unmodifiable(_activities[c]!);
-
-            Future<void> addActivity(Category c, String text) async {
-              final t = text.trim();
-              if (t.isEmpty) return;
-              _activities[c]!.add(t);
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.setStringList(c.storageKey, _activities[c]!);
-              notifyListeners();
-            }
-
-            Future<void> removeActivity(Category c, int index) async {
-              if (index < 0 || index >= _activities[c]!.length) return;
-              _activities[c]!.removeAt(index);
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.setStringList(c.storageKey, _activities[c]!);
-              notifyListeners();
-            }
-
-            bool get isProfileComplete => (name != null && name!.trim().isNotEmpty);
-          }
-
-          class MagnussonApp extends StatefulWidget {
-            const MagnussonApp({super.key});
-            @override
-            State<MagnussonApp> createState() => _MagnussonAppState();
-          }
-
-          class _MagnussonAppState extends State<MagnussonApp> {
-            final AppState state = AppState();
-            @override
-            void initState() {
-              super.initState();
-              state.load();
-            }
-            @override
-            Widget build(BuildContext context) {
-              return AnimatedBuilder(
-                animation: state,
-                builder: (context, _) {
-                  return MaterialApp(
-                    debugShowCheckedModeBanner: false,
-                    title: "12 veckor med Magnusson",
-                    theme: ThemeData(
-                      useMaterial3: true,
-                      colorScheme: ColorScheme.fromSeed(seedColor: AppColors.primary),
-                      appBarTheme: const AppBarTheme(
-                        centerTitle: true,
-                        backgroundColor: Colors.white,
-                        foregroundColor: AppColors.ink,
-                        elevation: 0.5,
-                      ),
-                      scaffoldBackgroundColor: const Color(0xFFF8FAFC),
-                      inputDecorationTheme: const InputDecorationTheme(border: OutlineInputBorder()),
-                    ),
-                    home: state.isProfileComplete
-                        ? DashboardScreen(state: state)
-                        : ProfileScreen(state: state),
-                  );
-                },
-              );
-            }
-          }
-
-          class ProfileScreen extends StatefulWidget {
-            final AppState state;
-            const ProfileScreen({super.key, required this.state});
-            @override
-            State<ProfileScreen> createState() => _ProfileScreenState();
-          }
-
-          class _ProfileScreenState extends State<ProfileScreen> {
-            final _formKey = GlobalKey<FormState>();
-            final _name = TextEditingController();
-            final _email = TextEditingController();
-            @override
-            void dispose() { _name.dispose(); _email.dispose(); super.dispose(); }
-            Future<void> _submit() async {
-              if (_formKey.currentState?.validate() ?? false) {
-                await widget.state.saveProfile(name: _name.text, email: _email.text);
-                if (!mounted) return;
-                Navigator.of(context).pushReplacement(MaterialPageRoute(
-                  builder: (_) => DashboardScreen(state: widget.state),
-                ));
-              }
-            }
-            @override
-            Widget build(BuildContext context) {
-              return Scaffold(
-                appBar: AppBar(title: const _LogoTitle()),
-                body: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 480),
-                    child: Card(
-                      elevation: 2, margin: const EdgeInsets.all(16),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Form(
-                          key: _formKey,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const SizedBox(height: 8),
-                              const Text("Skapa profil", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
-                              const SizedBox(height: 12),
-                              TextFormField(
-                                controller: _name,
-                                decoration: const InputDecoration(labelText: "Namn", hintText: "Skriv ditt namn"),
-                                validator: (v) => (v == null || v.trim().isEmpty) ? "Namn krävs" : null,
-                              ),
-                              const SizedBox(height: 12),
-                              TextFormField(
-                                controller: _email,
-                                decoration: const InputDecoration(labelText: "E-post (valfritt)", hintText: "namn@example.com"),
-                                keyboardType: TextInputType.emailAddress,
-                              ),
-                              const SizedBox(height: 16),
-                              SizedBox(
-                                width: double.infinity,
-                                child: FilledButton(onPressed: _submit, child: const Text("Fortsätt")),
-                              ),
-                              const SizedBox(height: 12),
-                              const Text("Sparas endast lokalt på enheten.", style: TextStyle(color: Colors.black54, fontSize: 12)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }
-          }
-
-          class DashboardScreen extends StatelessWidget {
-            final AppState state;
-            const DashboardScreen({super.key, required this.state});
-            @override
-            Widget build(BuildContext context) {
-              final greeting = state.name != null ? "Hej, ${state.name!}" : "Hej!";
-              return Scaffold(
-                appBar: AppBar(title: const _LogoTitle()),
-                body: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                      child: Row(children: [
-                        Text(greeting, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-                      ]),
-                    ),
-                    Expanded(
-                      child: GridView.count(
-                        crossAxisCount: 2, padding: const EdgeInsets.all(16),
-                        crossAxisSpacing: 12, mainAxisSpacing: 12,
-                        children: [
-                          _CategoryTile(category: Category.studier, state: state),
-                          _CategoryTile(category: Category.arbete,  state: state),
-                          _CategoryTile(category: Category.halsa,   state: state),
-                          _CategoryTile(category: Category.familj,  state: state),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }
-          }
-
-          class _CategoryTile extends StatelessWidget {
-            final Category category; final AppState state;
-            const _CategoryTile({required this.category, required this.state});
-            @override
-            Widget build(BuildContext context) {
-              return Material(
-                color: category.color, borderRadius: BorderRadius.circular(16),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(16),
-                  onTap: () {
-                    Navigator.of(context).push(MaterialPageRoute(
-                      builder: (_) => ActivityScreen(state: state, category: category),
-                    ));
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    child: Center(
-                      child: Text(category.title,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.ink),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }
-          }
-
-          class ActivityScreen extends StatefulWidget {
-            final AppState state; final Category category;
-            const ActivityScreen({super.key, required this.state, required this.category});
-            @override
-            State<ActivityScreen> createState() => _ActivityScreenState();
-          }
-
-          class _ActivityScreenState extends State<ActivityScreen> {
-            final TextEditingController _controller = TextEditingController();
-            Future<void> _add() async { await widget.state.addActivity(widget.category, _controller.text); _controller.clear(); }
-            @override
-            Widget build(BuildContext context) {
-              final items = widget.state.activities(widget.category);
-              return Scaffold(
-                appBar: AppBar(title: Text("${widget.category.title} – 12+M")),
-                body: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _controller,
-                              decoration: const InputDecoration(labelText: "Beskrivning av aktivitet", hintText: "Ex: Läsa 20 sidor byggfysik"),
-                              onSubmitted: (_) => _add(),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          FilledButton(onPressed: _add, child: const Text("Lägg till")),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: ListView.separated(
-                        itemCount: items.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final text = items[index];
-                          return ListTile(
-                            title: Text(text),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.delete_outline),
-                              onPressed: () => widget.state.removeActivity(widget.category, index),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }
-          }
-
-          class _LogoTitle extends StatelessWidget {
-            const _LogoTitle();
-            @override
-            Widget build(BuildContext context) {
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Text("12+M", style: TextStyle(fontWeight: FontWeight.w900, color: AppColors.primary)),
-                  SizedBox(width: 8),
-                  Text("12 veckor med Magnusson", style: TextStyle(fontWeight: FontWeight.w700)),
-                ],
-              );
-            }
-          }
-          DART
-
-      - name: Brand PWA (manifest + index.html)
-        run: |
-          # Manifest: sätt namn, short_name och start_url dynamiskt
-          jq \
-            --arg name  "12 veckor med Magnusson" \
-            --arg short "12+M" \
-            --arg url   "/${{ github.event.repository.name }}/" \
-            '.name=$name | .short_name=$short | .start_url=$url | .theme_color="#2563EB" | .background_color="#FFFFFF"' \
-            web/manifest.json > web/manifest.json.new
-          mv web/manifest.json.new web/manifest.json
-          # Theme-color i index
-          sed -i 's#<meta name="theme-color" content="[^"]*"#<meta name="theme-color" content="#2563EB"#' web/index.html || true
+      - name: Install deps
+        run: flutter pub get
 
       - name: Build web
         run: flutter build web --release --base-href=/${{ github.event.repository.name }}/
 
-      - name: Deploy to gh-pages
+      - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
