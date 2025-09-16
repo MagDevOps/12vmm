@@ -850,8 +850,8 @@ jobs:
                  /* ================================ LEVEL 4 ================================ */
                class ActivitiesScreen extends StatefulWidget {
           final AppState state;
-         final Category category;
-         final Goal goal;
+          final Category category;
+          final Goal goal;
 
           const ActivitiesScreen(
                         {super.key,
