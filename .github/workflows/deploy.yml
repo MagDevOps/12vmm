@@ -847,230 +847,214 @@ jobs:
             }
           }
 
-          /* ================================ LEVEL 4 ================================ */
+/* ================================ LEVEL 4 ================================ */
 
-          class ActivitiesScreen extends StatefulWidget {
-            final AppState state;
-            final Category category;
-            final Goal goal;
+class ActivitiesScreen extends StatefulWidget {
+  final AppState state;
+  final Category category;
+  final Goal goal;
 
-            const ActivitiesScreen(
-                {super.key,
-                required this.state,
-                required this.category,
-                required this.goal});
+  const ActivitiesScreen(
+      {super.key,
+      required this.state,
+      required this.category,
+      required this.goal});
 
-            @override
-            State<ActivitiesScreen> createState() => _ActivitiesScreenState();
-          }
+  @override
+  State<ActivitiesScreen> createState() => _ActivitiesScreenState();
+}
 
-          class _ActivitiesScreenState extends State<ActivitiesScreen> {
-            final TextEditingController _ctrl = TextEditingController();
-            int? manualWeek;
+class _ActivitiesScreenState extends State<ActivitiesScreen> {
+  final TextEditingController _ctrl = TextEditingController();
+  int? manualWeek;
 
-            @override
-            void dispose() {
-              _ctrl.dispose();
-              super.dispose();
-            }
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
-            int get currentWeek => manualWeek ?? widget.state.currentWeek;
+  int get currentWeek => manualWeek ?? widget.state.currentWeek;
 
-            @override
-            Widget build(BuildContext context) {
-              final week = currentWeek;
-              final range = widget.state.weekDateRange(week);
-              final acts = widget.goal.activities;
+  @override
+  Widget build(BuildContext context) {
+    final week = currentWeek;
+    final range = widget.state.weekDateRange(week);
+    final acts = widget.goal.activities;
 
-              final plannedCount =
-                  acts.where((a) => a.weeks[week - 1].planned).length;
-
-              return Scaffold(
-                appBar: AppBar(
-                  title: Text('${widget.goal.title} – Vecka $week/12'),
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('${widget.goal.title} – Vecka $week/12'),
+      ),
+      body: Column(
+        children: [
+          // Vecko-header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${_fmtDate(range.start)} – ${_fmtDate(range.end)}',
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                  ),
                 ),
-                body: Column(
+                Row(
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '${_fmtDate(range.start)} – ${_fmtDate(range.end)}',
-                              style: const TextStyle(
-                                  fontSize: 14, fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                          Row(
-                            children: [
-                              IconButton(
-                                tooltip: 'Föregående vecka',
-                                onPressed:
-                                    week > 1 ? () => setState(() => manualWeek = (week - 1)) : null,
-                                icon: const Icon(Icons.chevron_left),
-                              ),
-                              Text('$week/12'),
-                              IconButton(
-                                tooltip: 'Nästa vecka',
-                                onPressed:
-                                    week < 12 ? () => setState(() => manualWeek = (week + 1)) : null,
-                                icon: const Icon(Icons.chevron_right),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                    IconButton(
+                      tooltip: 'Föregående vecka',
+                      onPressed: week > 1
+                          ? () => setState(() => manualWeek = (week - 1))
+                          : null,
+                      icon: const Icon(Icons.chevron_left),
                     ),
-
-                    if (plannedCount < 2)
-                      Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFF3C7),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.orange.shade300),
-                        ),
-                        child: Text(
-                          'Planera minst 2 aktiviteter denna vecka (nu: $plannedCount).',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _ctrl,
-                              decoration: const InputDecoration(
-                                labelText: 'Ny aktivitet (titel)',
-                                hintText: 'Ex: 30 min läsning / veckomöte / träning',
-                              ),
-                              onSubmitted: (_) async {
-                                await widget.state.addActivity(
-                                  widget.category,
-                                  widget.goal.id,
-                                  _ctrl.text,
-                                  true,
-                                );
-                                _ctrl.clear();
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          FilledButton(
-                            onPressed: () async {
-                              await widget.state.addActivity(
-                                widget.category,
-                                widget.goal.id,
-                                _ctrl.text,
-                                true,
-                              );
-                              _ctrl.clear();
-                            },
-                            child: const Text('Lägg till'),
-                          ),
-                        ],
-                      ),
+                    Text('$week/12'),
+                    IconButton(
+                      tooltip: 'Nästa vecka',
+                      onPressed: week < 12
+                          ? () => setState(() => manualWeek = (week + 1))
+                          : null,
+                      icon: const Icon(Icons.chevron_right),
                     ),
-
-                    Expanded(
-                      child: acts.isEmpty
-                          ? const Center(
-                              child: Text('Inga aktiviteter ännu. Lägg till ovan.'),
-                            )
-                          : ListView.separated(
-                              itemCount: acts.length,
-                              separatorBuilder: (_, __) => const Divider(height: 1),
-                              itemBuilder: (context, i) {
-                                final a = acts[i];
-                                final w = a.weeks[week - 1];
-                                return ListTile(
-                                  contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 8),
-                                  title: Text(a.title,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w700, fontSize: 16)),
-                                  subtitle: Row(
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Switch(
-                                            value: w.planned,
-                                            onChanged: (v) => widget.state.togglePlanned(
-                                                widget.category,
-                                                widget.goal.id,
-                                                a.id,
-                                                week,
-                                                v),
-                                          ),
-                                          const Text('Planerad'),
-                                        ],
-                                      ),
-                                      const SizedBox(width: 16),
-                                      Row(
-                                        children: [
-                                          Checkbox(
-                                            value: w.done,
-                                            onChanged: w.planned
-                                                ? (v) => widget.state.toggleDone(
-                                                    widget.category,
-                                                    widget.goal.id,
-                                                    a.id,
-                                                    week,
-                                                    v ?? false)
-                                                : null,
-                                          ),
-                                          const Text('Klar'),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                  trailing: IconButton(
-                                    tooltip: 'Radera aktivitet',
-                                    icon: const Icon(Icons.delete_outline),
-                                    onPressed: () => widget.state.removeActivity(
-                                        widget.category, widget.goal.id, a.id),
-                                  ),
-                                );
-                              },
-                            ),
-                    ),
-
-                    Builder(builder: (_) {
-                      final planned =
-                          acts.where((a) => a.weeks[week - 1].planned).length;
-                      final done = acts
-                          .where((a) =>
-                              a.weeks[week - 1].planned && a.weeks[week - 1].done)
-                          .length;
-                      final pct = planned == 0 ? null : (done / planned);
-                      return Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          border: const Border(
-                            top: BorderSide(color: Color(0xFFE5E7EB)),
-                          ),
-                        ),
-                        child: Text(
-                          'Veckans progression: '
-                          '${pct == null ? "–" : "${(pct * 100).round()}%"}  '
-                          '(Klara: $done / Planerade: $planned)',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                      );
-                    }),
                   ],
                 ),
-              );
-            }
-          }
+              ],
+            ),
+          ),
+
+          // Ny aktivitet
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _ctrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Ny aktivitet (titel)',
+                      hintText: 'Ex: 30 min läsning / veckomöte / träning',
+                    ),
+                    onSubmitted: (_) async {
+                      await widget.state.addActivity(
+                        widget.category,
+                        widget.goal.id,
+                        _ctrl.text,
+                        true, // default: planera alla veckor
+                      );
+                      _ctrl.clear();
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: () async {
+                    await widget.state.addActivity(
+                      widget.category,
+                      widget.goal.id,
+                      _ctrl.text,
+                      true,
+                    );
+                    _ctrl.clear();
+                  },
+                  child: const Text('Lägg till'),
+                ),
+              ],
+            ),
+          ),
+
+          // Lista
+          Expanded(
+            child: acts.isEmpty
+                ? const Center(
+                    child: Text('Inga aktiviteter ännu. Lägg till ovan.'),
+                  )
+                : ListView.separated(
+                    itemCount: acts.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, i) {
+                      final a = acts[i];
+                      final w = a.weeks[week - 1];
+                      return ListTile(
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        title: Text(
+                          a.title,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 16),
+                        ),
+                        subtitle: Row(
+                          children: [
+                            Row(
+                              children: [
+                                Switch(
+                                  value: w.planned,
+                                  onChanged: (v) => widget.state.togglePlanned(
+                                      widget.category, widget.goal.id, a.id, week, v),
+                                ),
+                                const Text('Planerad'),
+                              ],
+                            ),
+                            const SizedBox(width: 16),
+                            Row(
+                              children: [
+                                Checkbox(
+                                  value: w.done,
+                                  onChanged: w.planned
+                                      ? (v) => widget.state.toggleDone(
+                                          widget.category,
+                                          widget.goal.id,
+                                          a.id,
+                                          week,
+                                          v ?? false)
+                                      : null,
+                                ),
+                                const Text('Klar'),
+                              ],
+                            ),
+                          ],
+                        ),
+                        trailing: IconButton(
+                          tooltip: 'Radera aktivitet',
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () => widget.state.removeActivity(
+                              widget.category, widget.goal.id, a.id),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+
+          // Footer – veckosammanfattning (utan minimi-krav)
+          Builder(builder: (_) {
+            final planned = acts.where((a) => a.weeks[week - 1].planned).length;
+            final done = acts
+                .where((a) => a.weeks[week - 1].planned && a.weeks[week - 1].done)
+                .length;
+            final pct = planned == 0 ? null : (done / planned);
+            return Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                border: const Border(
+                  top: BorderSide(color: Color(0xFFE5E7EB)),
+                ),
+              ),
+              child: Text(
+                'Veckans progression: '
+                '${pct == null ? "–" : "${(pct * 100).round()}%"}  '
+                '(Klara: $done / Planerade: $planned)',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
 
           /* =============================== COMMON UI =============================== */
 
