@@ -1,4 +1,4 @@
-name: Deploy Flutter Web
+name: Deploy Flutter Web (12 veckor med Magnusson)
 
 on:
   push:
@@ -24,24 +24,33 @@ jobs:
       - name: Enable web
         run: flutter config --enable-web
 
-      # Skapa ett tomt Flutter-projekt om repot saknar pubspec.yaml (för mobilredigering)
-      - name: Ensure project exists
+      # Skapa ett nytt Flutter-projekt (om källkod saknas)
+      - name: Scaffold Flutter web app
         run: |
-          if [ ! -f pubspec.yaml ]; then
-            flutter create app --platforms=web
-            shopt -s dotglob
-            mv app/* .
-            rmdir app
-          fi
+          rm -rf *
+          flutter create tolv_veckor_med_magnusson --platforms=web
+          shopt -s dotglob
+          mv tolv_veckor_med_magnusson/* .
+          rmdir tolv_veckor_med_magnusson
 
-      - name: Install deps
-        run: flutter pub get
+      - name: Add dependencies
+        run: flutter pub add shared_preferences
 
-      - name: Build web
-        run: flutter build web --release --base-href=/${{ github.event.repository.name }}/
+      # Skriv vår riktiga appkod
+      - name: Write main.dart (profil + 4 pastellrutor + aktivitetslista)
+        shell: bash
+        run: |
+          cat > lib/main.dart <<'DART'
+          import 'package:flutter/material.dart';
+          import 'package:shared_preferences/shared_preferences.dart';
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: build/web
+          void main() {
+            WidgetsFlutterBinding.ensureInitialized();
+            runApp(const MagnussonApp());
+          }
+
+          class AppColors {
+            static const red = Color(0xFFFFCDD2);
+            static const yellow = Color(0xFFFFF9C4);
+            static const green = Color(0xFFC8E6C9);
+            static const blue = Color(0xFFBBDEFB);
