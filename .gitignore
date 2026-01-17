@@ -9,5 +9,17 @@ pubspec.lock
 .idea/
 .vscode/
 **/DerivedData/
+
+# Node.js / React
+node_modules/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.eslintcache
+package-lock.json
+yarn.lock
+
 # Misc
 .DS_Store
